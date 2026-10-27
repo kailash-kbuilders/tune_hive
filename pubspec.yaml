@@ -27,11 +27,10 @@ dev_dependencies:
 
 flutter_launcher_icons:
   android: true
-  ios: true
+  ios: false # ios/ folder is not in the repo; run this locally after flutter create .
   image_path: assets/icon/app_icon.png
   adaptive_icon_background: "#10160A"
   adaptive_icon_foreground: assets/icon/app_icon.png
-  remove_alpha_ios: true
 
 flutter:
   uses-material-design: true
