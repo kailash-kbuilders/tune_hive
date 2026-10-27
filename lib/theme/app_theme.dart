@@ -17,40 +17,63 @@ class AppColors {
 
 class AppTheme {
   static ThemeData build() {
-    final base = ThemeData.dark(useMaterial3: true);
-    return base.copyWith(
+    const scheme = ColorScheme.dark(
+      primary: AppColors.lime,
+      onPrimary: Color(0xFF10160A),
+      secondary: AppColors.limeSoft,
+      surface: AppColors.card,
+      onSurface: AppColors.text,
+    );
+
+    final base = ThemeData(
+      useMaterial3: true,
+      brightness: Brightness.dark,
+      colorScheme: scheme,
+      fontFamily: 'Poppins',
       scaffoldBackgroundColor: AppColors.bg,
       canvasColor: AppColors.bg,
-      colorScheme: base.colorScheme.copyWith(
-        primary: AppColors.lime,
-        onPrimary: const Color(0xFF10160A),
-        secondary: AppColors.limeSoft,
-        surface: AppColors.card,
-        onSurface: AppColors.text,
-      ),
-      fontFamily: 'Poppins',
+      dividerColor: AppColors.line,
+      splashFactory: InkSparkle.splashFactory,
+    );
+
+    return base.copyWith(
       textTheme: base.textTheme
           .apply(fontFamily: 'Poppins', bodyColor: AppColors.text, displayColor: AppColors.text)
           .copyWith(
             headlineMedium: const TextStyle(
-                fontFamily: 'Poppins', fontSize: 26, fontWeight: FontWeight.w600, color: AppColors.text, height: 1.25),
+                fontFamily: 'Poppins',
+                fontSize: 26,
+                fontWeight: FontWeight.w600,
+                color: AppColors.text,
+                height: 1.25),
             titleLarge: const TextStyle(
-                fontFamily: 'Poppins', fontSize: 19, fontWeight: FontWeight.w600, color: AppColors.text),
+                fontFamily: 'Poppins',
+                fontSize: 19,
+                fontWeight: FontWeight.w600,
+                color: AppColors.text),
             titleMedium: const TextStyle(
-                fontFamily: 'Poppins', fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.text),
-            bodyMedium: const TextStyle(fontFamily: 'Poppins', fontSize: 13.5, color: AppColors.text, height: 1.45),
-            bodySmall: const TextStyle(fontFamily: 'Poppins', fontSize: 12, color: AppColors.muted),
+                fontFamily: 'Poppins',
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: AppColors.text),
+            bodyMedium: const TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 13.5,
+                color: AppColors.text,
+                height: 1.45),
+            bodySmall: const TextStyle(
+                fontFamily: 'Poppins', fontSize: 12, color: AppColors.muted),
           ),
-      dividerColor: AppColors.line,
-      splashFactory: InkSparkle.splashFactory,
       bottomSheetTheme: const BottomSheetThemeData(
         backgroundColor: AppColors.card,
         surfaceTintColor: Colors.transparent,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
       ),
       snackBarTheme: const SnackBarThemeData(
         backgroundColor: AppColors.cardSoft,
-        contentTextStyle: TextStyle(fontFamily: 'Poppins', color: AppColors.text, fontSize: 13),
+        contentTextStyle:
+            TextStyle(fontFamily: 'Poppins', color: AppColors.text, fontSize: 13),
         behavior: SnackBarBehavior.floating,
       ),
       sliderTheme: const SliderThemeData(

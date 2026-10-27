@@ -7,7 +7,7 @@ import 'package:just_audio_background/just_audio_background.dart';
 
 import '../models/song.dart';
 
-enum RepeatMode { off, all, one }
+enum TrackRepeatMode { off, all, one }
 
 /// Owns the single AudioPlayer for the whole app: queue, shuffle, repeat,
 /// speed and the sleep timer. Background playback and the lock-screen
@@ -24,7 +24,7 @@ class PlayerService extends ChangeNotifier {
 
   Song? _current;
   bool _shuffle = false;
-  RepeatMode _repeat = RepeatMode.off;
+  TrackRepeatMode _repeat = TrackRepeatMode.off;
   double _speed = 1.0;
   bool _loadingTrack = false;
   String? _error;
@@ -38,7 +38,7 @@ class PlayerService extends ChangeNotifier {
   Song? get current => _current;
   List<Song> get queue => List.unmodifiable(_queue);
   bool get shuffleOn => _shuffle;
-  RepeatMode get repeatMode => _repeat;
+  TrackRepeatMode get repeatMode => _repeat;
   double get speed => _speed;
   String? get error => _error;
   bool get isLoadingTrack => _loadingTrack;
@@ -83,7 +83,7 @@ class PlayerService extends ChangeNotifier {
       notifyListeners();
       return;
     }
-    if (_repeat == RepeatMode.one) {
+    if (_repeat == TrackRepeatMode.one) {
       _player.seek(Duration.zero);
       unawaited(_player.play());
       return;
@@ -172,7 +172,7 @@ class PlayerService extends ChangeNotifier {
     if (_orderPos + 1 < _order.length) {
       _orderPos++;
       await _load(autoPlay: true);
-    } else if (_repeat == RepeatMode.all) {
+    } else if (_repeat == TrackRepeatMode.all) {
       _orderPos = 0;
       await _load(autoPlay: true);
     } else {
@@ -257,14 +257,14 @@ class PlayerService extends ChangeNotifier {
 
   void cycleRepeat() {
     switch (_repeat) {
-      case RepeatMode.off:
-        _repeat = RepeatMode.all;
+      case TrackRepeatMode.off:
+        _repeat = TrackRepeatMode.all;
         break;
-      case RepeatMode.all:
-        _repeat = RepeatMode.one;
+      case TrackRepeatMode.all:
+        _repeat = TrackRepeatMode.one;
         break;
-      case RepeatMode.one:
-        _repeat = RepeatMode.off;
+      case TrackRepeatMode.one:
+        _repeat = TrackRepeatMode.off;
         break;
     }
     notifyListeners();

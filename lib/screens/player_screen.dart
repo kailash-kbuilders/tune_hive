@@ -199,10 +199,10 @@ class PlayerScreen extends StatelessWidget {
                       onTap: player.next,
                     ),
                     _RoundIcon(
-                      icon: player.repeatMode == RepeatMode.one
+                      icon: player.repeatMode == TrackRepeatMode.one
                           ? Icons.repeat_one_rounded
                           : Icons.repeat_rounded,
-                      active: player.repeatMode != RepeatMode.off,
+                      active: player.repeatMode != TrackRepeatMode.off,
                       onTap: player.cycleRepeat,
                     ),
                   ],
