@@ -83,6 +83,12 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      # on_audio_query_android predates AGP 8 (no namespace in build.gradle).
+      # This adds it, drops the manifest package attribute and lifts a too-low
+      # minSdk, so Gradle can configure the plugin.
+      - name: Patch legacy plugins for AGP 8
+        run: python3 tool/patch_plugins.py
+
       - name: Generate app icon
         run: dart run flutter_launcher_icons
 
