@@ -47,14 +47,34 @@ def patch_gradle(build_file: pathlib.Path) -> bool:
                 if stripped != manifest_text:
                     manifest.write_text(stripped)
 
-    def bump(match):
-        value = int(match.group(2))
-        return match.group(1) + str(max(value, 21))
+    def bump_min(match):
+        return match.group(1) + str(max(int(match.group(2)), 21))
 
-    bumped = re.sub(r"(minSdkVersion\s+)(\d+)", bump, text)
+    def bump_compile(match):
+        return match.group(1) + str(max(int(match.group(2)), 36))
+
+    bumped = re.sub(r"(minSdkVersion\s+)(\d+)", bump_min, text)
+    bumped = re.sub(r"(compileSdkVersion\s+)(\d+)", bump_compile, bumped)
     if bumped != text:
         text = bumped
         changed = True
+
+    # AGP 8 fails with "Inconsistent JVM-target compatibility" when the plugin
+    # leaves Java at 11 while Kotlin compiles at 17. Pin both to 17.
+    if "compileOptions" not in text:
+        block = (
+            "\n    compileOptions {\n"
+            '        sourceCompatibility JavaVersion.VERSION_17\n'
+            '        targetCompatibility JavaVersion.VERSION_17\n'
+            "    }\n"
+            "    kotlinOptions {\n"
+            '        jvmTarget = "17"\n'
+            "    }\n"
+        )
+        anchor = re.search(r"android\s*\{", text)
+        if anchor:
+            text = text[: anchor.end()] + block + text[anchor.end():]
+            changed = True
 
     if changed:
         build_file.write_text(text)
