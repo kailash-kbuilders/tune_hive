@@ -13,6 +13,7 @@ class LibraryService extends ChangeNotifier {
   static const _kRecent = 'recent';
   static const _kPlaylists = 'playlists';
   static const _kName = 'listener_name';
+  static const _kCounts = 'play_counts';
 
   SharedPreferences? _prefs;
   bool _onboarded = false;
@@ -20,6 +21,7 @@ class LibraryService extends ChangeNotifier {
   final List<Song> _favourites = [];
   final List<Song> _recent = [];
   final Map<String, List<Song>> _playlists = {};
+  final Map<String, int> _playCounts = {};
 
   bool get onboarded => _onboarded;
   String get listenerName => _listenerName;
@@ -38,6 +40,19 @@ class LibraryService extends ChangeNotifier {
     _recent
       ..clear()
       ..addAll(_decodeList(prefs.getString(_kRecent)));
+    final rawCounts = prefs.getString(_kCounts);
+    if (rawCounts != null) {
+      try {
+        final map = jsonDecode(rawCounts);
+        if (map is Map) {
+          map.forEach((key, value) {
+            if (key is String && value is num) _playCounts[key] = value.toInt();
+          });
+        }
+      } catch (_) {
+        // Corrupt counts — start clean.
+      }
+    }
     final rawPlaylists = prefs.getString(_kPlaylists);
     if (rawPlaylists != null) {
       try {
@@ -103,9 +118,34 @@ class LibraryService extends ChangeNotifier {
   Future<void> addRecent(Song song) async {
     _recent.removeWhere((s) => s.id == song.id);
     _recent.insert(0, song);
-    if (_recent.length > 30) _recent.removeRange(30, _recent.length);
+    if (_recent.length > 50) _recent.removeRange(50, _recent.length);
+    _playCounts[song.id] = (_playCounts[song.id] ?? 0) + 1;
     notifyListeners();
     await _prefs?.setString(_kRecent, jsonEncode(_recent.map((s) => s.toJson()).toList()));
+    await _prefs?.setString(_kCounts, jsonEncode(_playCounts));
+  }
+
+  int playCount(Song song) => _playCounts[song.id] ?? 0;
+
+  /// Most played artist in the history — used to seed "Aapke liye".
+  String? get topArtist {
+    final counts = <String, int>{};
+    for (final song in _recent) {
+      final artist = song.artist.trim();
+      if (artist.isEmpty || artist == 'Unknown artist' || artist == 'Creative Commons') continue;
+      counts[artist] = (counts[artist] ?? 0) + (_playCounts[song.id] ?? 1);
+    }
+    if (counts.isEmpty) return null;
+    final sorted = counts.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+    return sorted.first.key;
+  }
+
+  Future<void> clearHistory() async {
+    _recent.clear();
+    _playCounts.clear();
+    notifyListeners();
+    await _prefs?.remove(_kRecent);
+    await _prefs?.remove(_kCounts);
   }
 
   List<Song> playlist(String name) => List.unmodifiable(_playlists[name] ?? const []);

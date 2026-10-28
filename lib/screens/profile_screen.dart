@@ -7,9 +7,9 @@ import '../services/player_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/gradient_bg.dart';
 import '../widgets/sheets.dart';
+import 'history_screen.dart';
 import 'playlists_screen.dart';
 import 'queue_screen.dart';
-import 'song_list_screen.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -176,15 +176,13 @@ class ProfileScreen extends StatelessWidget {
             ),
             _Tile(
               icon: Icons.history_rounded,
-              title: 'Recently played',
-              subtitle: '${library.recent.length} tracks',
-              onTap: () => Navigator.of(context).push(MaterialPageRoute(
-                builder: (_) => SongListScreen(
-                  title: 'Recently played',
-                  songs: library.recent,
-                  emptyMessage: 'Jaise hi koi gaana bajega, wo yahan aa jayega.',
-                ),
-              )),
+              title: 'History',
+              subtitle: library.topArtist == null
+                  ? '${library.recent.length} tracks'
+                  : '${library.recent.length} tracks · ${library.topArtist}',
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const HistoryScreen()),
+              ),
             ),
             _Tile(
               icon: Icons.queue_rounded,
@@ -217,7 +215,7 @@ class ProfileScreen extends StatelessWidget {
             _Tile(
               icon: Icons.public_rounded,
               title: 'Music sources',
-              subtitle: 'Device + Internet Archive (CC)',
+              subtitle: 'Device + Audius + Internet Archive',
               onTap: () => _showSources(context),
             ),
             _Tile(

@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../models/song.dart';
 import '../services/device_music_service.dart';
 import '../services/library_service.dart';
+import '../services/network_service.dart';
 import '../services/online_music_service.dart';
 import '../services/player_service.dart';
 import '../theme/app_theme.dart';
@@ -30,6 +31,16 @@ class _SearchScreenState extends State<SearchScreen> {
   List<Song> _online = [];
   bool _searching = false;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    // Online first: if the device has internet, search the live catalogue.
+    NetworkService.isOnline().then((online) {
+      if (!mounted || !online) return;
+      setState(() => _scope = 'Online');
+    });
+  }
 
   static const _suggestions = [
     'Bollywood',
@@ -222,7 +233,7 @@ class _SearchScreenState extends State<SearchScreen> {
                       title: _scope == 'Device' ? 'Koi gaana nahi mila' : 'Online search',
                       message: _scope == 'Device'
                           ? 'Device ke gaane yahan dikhenge. Online tab se free Creative Commons music bhi search kar sakte ho.'
-                          : 'Do akshar likho — Internet Archive ke free songs aa jayenge.',
+                          : 'Do akshar likho — Audius aur Internet Archive se free songs aa jayenge.',
                     )
                   : ListView.builder(
                       padding: const EdgeInsets.only(top: 8, bottom: 200),
