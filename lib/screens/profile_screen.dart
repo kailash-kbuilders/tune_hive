@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../services/device_music_service.dart';
 import '../services/library_service.dart';
+import '../services/online_music_service.dart';
 import '../services/player_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/gradient_bg.dart';
@@ -61,20 +62,37 @@ class ProfileScreen extends StatelessWidget {
         backgroundColor: AppColors.cardSoft,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
         title: const Text('Music sources', style: TextStyle(fontSize: 16)),
-        content: const Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '1. Device — phone me rakhi saari audio files (30 second se lambi).',
-              style: TextStyle(fontSize: 12.5, height: 1.6),
-            ),
-            SizedBox(height: 10),
-            Text(
-              '2. Internet Archive — Creative Commons aur public-domain music, bina login ke. Ye legally free hai, isliye koi paid subscription nahi chahiye.',
-              style: TextStyle(fontSize: 12.5, height: 1.6),
-            ),
-          ],
+        content: const SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '1. Device — phone me rakhi saari audio files (30 second se lambi).',
+                style: TextStyle(fontSize: 12.5, height: 1.6),
+              ),
+              SizedBox(height: 10),
+              Text(
+                '2. Jamendo — Creative Commons music ka bada legal catalogue. Full tracks stream hote hain. Iske liye free API key chahiye (Settings me daal do).',
+                style: TextStyle(fontSize: 12.5, height: 1.6),
+              ),
+              SizedBox(height: 10),
+              Text(
+                '3. Audius — artists apna music khud upload karte hain, bina key ke chalta hai.',
+                style: TextStyle(fontSize: 12.5, height: 1.6),
+              ),
+              SizedBox(height: 10),
+              Text(
+                '4. Internet Archive — Creative Commons aur public-domain recordings.',
+                style: TextStyle(fontSize: 12.5, height: 1.6),
+              ),
+              SizedBox(height: 14),
+              Text(
+                'YouTube ka music jaan bujh ke shaamil nahi kiya — uske stream bina license use karna app ko Play Store se ban karwa deta hai.',
+                style: TextStyle(fontSize: 12, height: 1.6, color: AppColors.muted),
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(
@@ -85,6 +103,69 @@ class ProfileScreen extends StatelessWidget {
       ),
     );
   }
+
+  Future<void> _editJamendo(BuildContext context) async {
+    final library = context.read<LibraryService>();
+    final online = context.read<OnlineMusicService>();
+    final controller = TextEditingController(text: library.jamendoClientId ?? '');
+    final value = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppColors.cardSoft,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+        title: const Text('Jamendo API key', style: TextStyle(fontSize: 16)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'developer.jamendo.com par free account banao — Client ID turant mil jaata hai. Usse full legal tracks online chalu ho jayenge.',
+              style: TextStyle(fontSize: 12, height: 1.6, color: AppColors.muted),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              style: const TextStyle(fontSize: 13.5),
+              decoration: InputDecoration(
+                hintText: 'Client ID',
+                hintStyle: const TextStyle(color: AppColors.muted, fontSize: 13),
+                filled: true,
+                fillColor: AppColors.card,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel', style: TextStyle(color: AppColors.muted)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(controller.text.trim()),
+            child: const Text('Save', style: TextStyle(color: AppColors.lime)),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (value == null) return;
+    await library.setJamendoClientId(value);
+    online.clientId = value;
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(value.isEmpty
+            ? 'Jamendo key hata di — Audius aur Archive use honge'
+            : 'Jamendo key save ho gayi'),
+      ),
+    );
+  }
+
 
   void _showAbout(BuildContext context) {
     showDialog<void>(
@@ -212,6 +293,14 @@ class ProfileScreen extends StatelessWidget {
             ),
             const SizedBox(height: 18),
             const _GroupLabel('About'),
+            _Tile(
+              icon: Icons.vpn_key_rounded,
+              title: 'Jamendo API key',
+              subtitle: library.jamendoClientId == null
+                  ? 'Set karo — legal full tracks online'
+                  : 'Set hai · full tracks chalu',
+              onTap: () => _editJamendo(context),
+            ),
             _Tile(
               icon: Icons.public_rounded,
               title: 'Music sources',

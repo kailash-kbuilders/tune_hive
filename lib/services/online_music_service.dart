@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/song.dart';
 
@@ -19,6 +20,7 @@ class OnlineMusicService {
   OnlineMusicService();
 
   static const String _appName = 'TuneHive';
+  static const String _kJamendoKey = 'jamendo_client_id';
   static const String _audiusIndex = 'https://api.audius.co';
   static const String _indiaFilter =
       '(hindi OR bollywood OR punjabi OR tamil OR telugu OR indian OR ghazal OR bhajan)';
@@ -26,6 +28,98 @@ class OnlineMusicService {
   final Map<String, List<Song>> _cache = {};
   String? _audiusBase;
   DateTime? _baseAt;
+  String? _clientId;
+
+  /// Jamendo client id. Saved from Settings, cached here for the session.
+  set clientId(String? value) {
+    _clientId = (value == null || value.trim().isEmpty) ? null : value.trim();
+    _cache.clear();
+  }
+
+  Future<String?> _jamendoKey() async {
+    if (_clientId != null) return _clientId;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final stored = prefs.getString(_kJamendoKey);
+      _clientId = (stored == null || stored.isEmpty) ? null : stored;
+    } catch (_) {
+      _clientId = null;
+    }
+    return _clientId;
+  }
+
+  /// Tries each source in order and returns the first non-empty result.
+  Future<List<Song>> _chain(List<Future<List<Song>> Function()> steps) async {
+    Object? lastError;
+    for (final step in steps) {
+      try {
+        final songs = await step();
+        if (songs.isNotEmpty) return songs;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    if (lastError != null) throw const OnlineUnavailable();
+    throw const OnlineUnavailable();
+  }
+
+  // ---------------------------------------------------------------- Jamendo --
+
+  Future<List<Song>> _jamendo(Map<String, String> params) async {
+    final key = await _jamendoKey();
+    if (key == null) throw const OnlineUnavailable();
+    final uri = Uri.https('api.jamendo.com', '/v3.0/tracks/', <String, String>{
+      'client_id': key,
+      'format': 'json',
+      'limit': '20',
+      'include': 'musicinfo',
+      'audioformat': 'mp32',
+      'imagesize': '400',
+      ...params,
+    });
+    final response = await http.get(uri).timeout(const Duration(seconds: 20));
+    if (response.statusCode != 200) throw const OnlineUnavailable();
+    final decoded = jsonDecode(response.body);
+    if (decoded is! Map) throw const OnlineUnavailable();
+    final headers = decoded['headers'];
+    if (headers is Map && headers['status'] == 'failed') throw const OnlineUnavailable();
+    final results = decoded['results'];
+    if (results is! List) throw const OnlineUnavailable();
+    final songs = <Song>[];
+    for (final item in results) {
+      if (item is! Map) continue;
+      final song = _jamendoSong(Map<String, dynamic>.from(item));
+      if (song != null) songs.add(song);
+    }
+    if (songs.isEmpty) throw const OnlineUnavailable();
+    return songs;
+  }
+
+  Song? _jamendoSong(Map<String, dynamic> track) {
+    final audio = track['audio']?.toString();
+    final id = track['id']?.toString();
+    if (audio == null || audio.isEmpty || id == null || id.isEmpty) return null;
+    String? genre;
+    final musicinfo = track['musicinfo'];
+    if (musicinfo is Map) {
+      final tags = musicinfo['tags'];
+      if (tags is Map) {
+        final genres = tags['genres'];
+        if (genres is List && genres.isNotEmpty) genre = genres.first.toString();
+      }
+    }
+    return Song(
+      id: 'jamendo:$id',
+      title: track['name']?.toString() ?? 'Untitled',
+      artist: track['artist_name']?.toString() ?? 'Jamendo artist',
+      album: track['album_name']?.toString(),
+      uri: audio,
+      duration: Duration(seconds: (track['duration'] as num?)?.toInt() ?? 0),
+      artworkUrl: track['image']?.toString(),
+      isOnline: true,
+      genre: genre,
+    );
+  }
 
   // ---------------------------------------------------------------- Audius --
 
@@ -93,63 +187,43 @@ class OnlineMusicService {
 
   // --------------------------------------------------------------- public ---
 
-  /// What is trending right now on Audius (falls back to the archive).
-  Future<List<Song>> trendingToday({int limit = 16}) => _cached('trending', () async {
-        try {
-          return await _audius('/v1/tracks/trending', {
-            'time': 'week',
-            'limit': '$limit',
-          });
-        } catch (_) {
-          return _run('$_indiaFilter AND mediatype:(audio)', limit, sort: 'downloads desc');
-        }
-      });
+  /// Trending this week — Jamendo first (full legal tracks), then Audius,
+  /// then the Internet Archive.
+  Future<List<Song>> trendingToday({int limit = 16}) => _cached('trending', () => _chain([
+        () => _jamendo({'order': 'popularity_week', 'limit': '$limit'}),
+        () => _audius('/v1/tracks/trending', {'time': 'week', 'limit': '$limit'}),
+        () => _run('$_indiaFilter AND mediatype:(audio)', limit, sort: 'downloads desc'),
+      ]));
 
-  /// Fresh uploads / rising tracks this month.
-  Future<List<Song>> newRising({int limit = 16}) => _cached('rising', () async {
-        try {
-          return await _audius('/v1/tracks/trending', {
-            'time': 'month',
-            'limit': '$limit',
-          });
-        } catch (_) {
-          return _run('$_indiaFilter AND mediatype:(audio)', limit, sort: 'publicdate desc');
-        }
-      });
+  /// Newest releases first.
+  Future<List<Song>> newRising({int limit = 16}) => _cached('rising', () => _chain([
+        () => _jamendo({'order': 'releasedate_desc', 'limit': '$limit'}),
+        () => _audius('/v1/tracks/trending', {'time': 'month', 'limit': '$limit'}),
+        () => _run('$_indiaFilter AND mediatype:(audio)', limit, sort: 'publicdate desc'),
+      ]));
 
   /// Category browsing (Hindi, Punjabi, Party …).
   Future<List<Song>> browse({String? genre, int limit = 16}) async {
     final term = genre?.toLowerCase().trim();
     if (term == null || term == 'all') return trendingToday(limit: limit);
-    final key = 'g:$term:$limit';
-    return _cached(key, () async {
-      try {
-        return await _audius('/v1/tracks/search', {
-          'query': _audiusTerm(term),
-          'limit': '$limit',
-        });
-      } catch (_) {
-        return _run('${_alias(term)} AND mediatype:(audio)', limit);
-      }
-    });
+    return _cached('g:$term:$limit', () => _chain([
+          () => _jamendo({'fuzzytags': _tagFor(term), 'limit': '$limit'}),
+          () => _audius('/v1/tracks/search', {'query': _audiusTerm(term), 'limit': '$limit'}),
+          () => _run('${_alias(term)} AND mediatype:(audio)', limit),
+        ]));
   }
 
+  /// Search across every source, ranked so the closest match comes first.
   Future<List<Song>> search(String term, {int limit = 24}) async {
     final query = term.trim();
     if (query.isEmpty) return trendingToday(limit: limit);
-    final key = 's:$query:$limit';
-    return _cached(key, () async {
-      try {
-        final results = await _audius('/v1/tracks/search', {
-          'query': query,
-          'limit': '$limit',
-        });
-        if (results.isNotEmpty) return _rank(results, query);
-      } catch (_) {
-        // fall through to the archive
-      }
-      final archive = await _run('$query AND mediatype:(audio)', limit);
-      return _rank(archive, query);
+    return _cached('s:$query:$limit', () async {
+      final songs = await _chain([
+        () => _jamendo({'search': query, 'limit': '$limit'}),
+        () => _audius('/v1/tracks/search', {'query': query, 'limit': '$limit'}),
+        () => _run('$query AND mediatype:(audio)', limit),
+      ]);
+      return _rank(songs, query);
     });
   }
 
@@ -176,6 +250,22 @@ class OnlineMusicService {
     if (title.contains(q)) return 2;
     if (song.artist.toLowerCase().contains(q)) return 1;
     return 0;
+  }
+
+  static String _tagFor(String term) {
+    switch (term) {
+      case 'hindi':
+      case 'bollywood':
+        return 'bollywood';
+      case 'bhakti':
+        return 'devotional';
+      case 'ghazal':
+        return 'sufi';
+      case 'hip-hop':
+        return 'hiphop';
+      default:
+        return term;
+    }
   }
 
   static String _audiusTerm(String term) {
