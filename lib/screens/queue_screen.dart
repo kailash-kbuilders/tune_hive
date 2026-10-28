@@ -35,7 +35,7 @@ class QueueScreen extends StatelessWidget {
                         children: [
                           Text('Queue', style: Theme.of(context).textTheme.titleLarge),
                           Text(
-                            '${songs.length} tracks · drag karke order badlo',
+                            '${songs.length} songs · drag karke order badlo',
                             style: const TextStyle(fontSize: 11.5, color: AppColors.muted),
                           ),
                         ],

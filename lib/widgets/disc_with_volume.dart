@@ -89,9 +89,10 @@ class _DiscWithVolumeState extends State<DiscWithVolume> {
   Widget build(BuildContext context) {
     return SizedBox(
       height: widget.size,
-      width: widget.size + 62,
+      width: widget.size,
       child: Stack(
-        alignment: Alignment.centerLeft,
+        clipBehavior: Clip.none,
+        alignment: Alignment.center,
         children: [
           GestureDetector(
             onPanStart: _start,
@@ -106,13 +107,13 @@ class _DiscWithVolumeState extends State<DiscWithVolume> {
             ),
           ),
           Positioned(
-            right: 0,
+            right: -30,
             child: IgnorePointer(
               child: AnimatedOpacity(
                 duration: const Duration(milliseconds: 180),
                 opacity: _show ? 1 : 0,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
                   decoration: BoxDecoration(
                     color: AppColors.card,
                     borderRadius: BorderRadius.circular(16),

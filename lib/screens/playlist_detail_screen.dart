@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -19,8 +21,8 @@ class PlaylistDetailScreen extends StatelessWidget {
   Future<void> _play(BuildContext context, List<Song> songs, int index) async {
     final player = context.read<PlayerService>();
     final library = context.read<LibraryService>();
-    await player.playSongs(songs, index);
-    await library.addRecent(songs[index]);
+    unawaited(player.playSongs(songs, index));
+    unawaited(library.addRecent(songs[index]));
     if (!context.mounted) return;
     Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PlayerScreen()));
   }

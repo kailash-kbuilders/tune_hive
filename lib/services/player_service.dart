@@ -7,6 +7,7 @@ import 'dart:ui' as ui;
 import 'package:audio_service/audio_service.dart';
 import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import 'package:just_audio/just_audio.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -156,6 +157,9 @@ class PlayerService extends BaseAudioHandler with QueueHandler, SeekHandler, Cha
   /// Replaces the queue and starts at [startIndex].
   Future<void> playSongs(List<Song> songs, int startIndex) async {
     if (songs.isEmpty) return;
+    // A tap while the previous track is still loading must not start a second
+    // load — that is what made the app feel like it needed two taps.
+    if (_loadingTrack) return;
     final selected = songs[startIndex.clamp(0, songs.length - 1)];
     _songs
       ..clear()
@@ -469,10 +473,14 @@ class PlayerService extends BaseAudioHandler with QueueHandler, SeekHandler, Cha
   }
 
   Future<Uint8List?> _artBytes(Song song) async {
-    final deviceId = song.deviceId;
-    if (deviceId == null) return null;
     try {
-      return await ArtworkCache.load(deviceId);
+      if (song.deviceId != null) return ArtworkCache.load(song.deviceId!);
+      final url = song.artworkUrl;
+      if (url == null || url.isEmpty) return null;
+      final response =
+          await http.get(Uri.parse(url)).timeout(const Duration(seconds: 15));
+      if (response.statusCode != 200) return null;
+      return response.bodyBytes;
     } catch (_) {
       return null;
     }
@@ -492,11 +500,11 @@ class PlayerService extends BaseAudioHandler with QueueHandler, SeekHandler, Cha
       final canvas = ui.Canvas(recorder);
       final paint = ui.Paint()
         ..imageFilter =
-            ui.ImageFilter.blur(sigmaX: 16, sigmaY: 16, tileMode: ui.TileMode.clamp);
+            ui.ImageFilter.blur(sigmaX: 7, sigmaY: 7, tileMode: ui.TileMode.clamp);
       canvas.drawImageRect(
         image,
         ui.Rect.fromLTWH(0, 0, width.toDouble(), height.toDouble()),
-        ui.Rect.fromLTWH(-30, -30, width + 60.0, height + 60.0),
+        ui.Rect.fromLTWH(-14, -14, width + 28.0, height + 28.0),
         paint,
       );
       final picture = recorder.endRecording();

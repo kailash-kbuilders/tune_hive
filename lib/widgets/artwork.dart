@@ -1,13 +1,15 @@
 import 'dart:typed_data';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../models/song.dart';
 import '../services/device_music_service.dart';
 import '../theme/app_theme.dart';
 
-/// Album art for a song: the embedded artwork of the file, or a quiet
-/// gradient placeholder when the file has none.
+/// Album art for a song: embedded artwork for device files, the archive.org
+/// thumbnail for online songs, and a quiet gradient placeholder when there
+/// is no artwork at all.
 class SongArtwork extends StatelessWidget {
   const SongArtwork({
     super.key,
@@ -41,23 +43,37 @@ class SongArtwork extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final deviceId = song.deviceId;
-    final child = deviceId == null
-        ? _fallback()
-        : FutureBuilder<Uint8List?>(
-            future: ArtworkCache.load(deviceId),
-            builder: (context, snapshot) {
-              final bytes = snapshot.data;
-              if (bytes == null || bytes.isEmpty) return _fallback();
-              return Image.memory(
-                bytes,
-                width: size,
-                height: size,
-                fit: BoxFit.cover,
-                gaplessPlayback: true,
-              );
-            },
+    Widget child;
+    if (song.isOnline) {
+      final url = song.artworkUrl;
+      child = (url == null || url.isEmpty)
+          ? _fallback()
+          : CachedNetworkImage(
+              imageUrl: url,
+              width: size,
+              height: size,
+              fit: BoxFit.cover,
+              placeholder: (_, __) => _fallback(),
+              errorWidget: (_, __, ___) => _fallback(),
+            );
+    } else if (song.deviceId != null) {
+      child = FutureBuilder<Uint8List?>(
+        future: ArtworkCache.load(song.deviceId!),
+        builder: (context, snapshot) {
+          final bytes = snapshot.data;
+          if (bytes == null || bytes.isEmpty) return _fallback();
+          return Image.memory(
+            bytes,
+            width: size,
+            height: size,
+            fit: BoxFit.cover,
+            gaplessPlayback: true,
           );
+        },
+      );
+    } else {
+      child = _fallback();
+    }
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(radius),

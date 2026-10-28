@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -17,8 +19,8 @@ class HistoryScreen extends StatelessWidget {
   Future<void> _play(BuildContext context, List<Song> songs, int index) async {
     final player = context.read<PlayerService>();
     final library = context.read<LibraryService>();
-    await player.playSongs(songs, index);
-    await library.addRecent(songs[index]);
+    unawaited(player.playSongs(songs, index));
+    unawaited(library.addRecent(songs[index]));
     if (!context.mounted) return;
     Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PlayerScreen()));
   }
@@ -74,7 +76,7 @@ class HistoryScreen extends StatelessWidget {
                         children: [
                           Text('History', style: Theme.of(context).textTheme.titleLarge),
                           Text(
-                            '${songs.length} tracks${library.topArtist != null ? ' · ${library.topArtist}' : ''}',
+                            '${songs.length} songs${library.topArtist != null ? ' · ${library.topArtist}' : ''}',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(fontSize: 11.5, color: AppColors.muted),

@@ -8,6 +8,7 @@ import 'screens/onboarding_screen.dart';
 import 'screens/root_shell.dart';
 import 'services/device_music_service.dart';
 import 'services/library_service.dart';
+import 'services/online_music_service.dart';
 import 'services/player_service.dart';
 import 'theme/app_theme.dart';
 
@@ -23,7 +24,7 @@ Future<void> main() async {
     builder: PlayerService.new,
     config: const AudioServiceConfig(
       androidNotificationChannelId: 'com.tunehive.playback',
-      androidNotificationChannelName: 'TuneHive playback',
+      androidNotificationChannelName: 'Playback',
       androidNotificationChannelDescription: 'Music controls for TuneHive',
       androidNotificationIcon: 'drawable/ic_stat_tunehive',
       notificationColor: Color(0xFFB9F04A),
@@ -55,6 +56,7 @@ class TuneHiveApp extends StatelessWidget {
         ChangeNotifierProvider<LibraryService>.value(value: library),
         ChangeNotifierProvider<PlayerService>.value(value: playerService),
         ChangeNotifierProvider<DeviceMusicService>(create: (_) => DeviceMusicService()),
+        Provider<OnlineMusicService>(create: (_) => OnlineMusicService()),
       ],
       child: MaterialApp(
         title: 'TuneHive',

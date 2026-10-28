@@ -92,12 +92,33 @@ class DeviceMusicService extends ChangeNotifier {
   List<Song> search(String query) {
     final q = query.trim().toLowerCase();
     if (q.isEmpty) return _songs;
-    return _songs
-        .where((s) =>
-            s.title.toLowerCase().contains(q) ||
-            s.artist.toLowerCase().contains(q) ||
-            (s.album ?? '').toLowerCase().contains(q))
-        .toList();
+    // A number like "295" should find "295..." and not bury it under "29...".
+    final numeric = RegExp(r'^[0-9]+$').hasMatch(q);
+    final matches = <Song>[];
+    final scores = <String, int>{};
+    for (final song in _songs) {
+      final title = song.title.toLowerCase();
+      final artist = song.artist.toLowerCase();
+      final album = (song.album ?? '').toLowerCase();
+      int score = 0;
+      if (title == q) {
+        score = 5;
+      } else if (title.startsWith(q)) {
+        score = 4;
+      } else if (title.contains(q)) {
+        score = 3;
+      } else if (artist.startsWith(q)) {
+        score = 2;
+      } else if (artist.contains(q) || album.contains(q)) {
+        score = 1;
+      }
+      if (score == 0) continue;
+      if (numeric && score < 4) continue;
+      matches.add(song);
+      scores[song.id] = score;
+    }
+    matches.sort((a, b) => (scores[b.id] ?? 0).compareTo(scores[a.id] ?? 0));
+    return matches;
   }
 }
 
