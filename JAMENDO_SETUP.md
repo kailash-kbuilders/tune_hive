@@ -1,7 +1,12 @@
-# Jamendo setup (one time, 2 minutes)
+# Jamendo setup (optional)
 
-Jamendo is the source of full, legal Creative Commons tracks. It needs a free
-Client ID. Get it once and the app never asks for it again.
+**The app works without Jamendo.** Out of the box the online section uses
+Audius (full tracks, no account), Deezer and Apple Music (official 30 second
+previews, no account) and the Internet Archive (Creative Commons).
+
+Jamendo is only worth adding if you want full-length Creative Commons tracks.
+It needs a free Client ID, and the Jamendo portal sometimes refuses logins —
+so treat it as a bonus, not a requirement.
 
 ## 1. Get the Client ID
 
@@ -38,6 +43,18 @@ would have to do it, so use A or B for a release.
 Open the app with internet: Home should show **Trending Today** and
 **New & Rising** with real tracks. Profile → Jamendo API key should read
 "Build me set hai".
+
+## If the Jamendo portal will not let you in
+
+Skip it. Everything below still works with no key at all:
+
+| Source | Account needed | What you get |
+| --- | --- | --- |
+| Audius | none | full tracks, trending, search |
+| Deezer | none | 30s official previews, latest Indian songs |
+| Apple Music (iTunes Search) | none | 30s official previews, India store |
+| Internet Archive | none | full Creative Commons tracks |
+| Jamendo | free Client ID | full Creative Commons tracks |
 
 ## Notes
 

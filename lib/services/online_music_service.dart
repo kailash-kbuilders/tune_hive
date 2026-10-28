@@ -191,20 +191,111 @@ class OnlineMusicService {
     );
   }
 
+  // ------------------------------------------------- Deezer / iTunes (no key) --
+
+  /// Deezer's public endpoints need no account. They return official 30 second
+  /// clips — enough to browse and discover, and completely legal.
+  Future<List<Song>> _deezer(String path, Map<String, String> params) async {
+    final uri = Uri.https('api.deezer.com', path, params);
+    final response = await http.get(uri).timeout(const Duration(seconds: 20));
+    if (response.statusCode != 200) throw const OnlineUnavailable();
+    final decoded = jsonDecode(response.body);
+    if (decoded is! Map) throw const OnlineUnavailable();
+    final data = decoded['data'];
+    if (data is! List) throw const OnlineUnavailable();
+    final songs = <Song>[];
+    for (final item in data) {
+      if (item is! Map) continue;
+      final song = _deezerSong(Map<String, dynamic>.from(item));
+      if (song != null) songs.add(song);
+    }
+    if (songs.isEmpty) throw const OnlineUnavailable();
+    return songs;
+  }
+
+  Song? _deezerSong(Map<String, dynamic> track) {
+    final preview = track['preview']?.toString();
+    final id = track['id']?.toString();
+    if (preview == null || preview.isEmpty || id == null) return null;
+    final artist = track['artist'];
+    final album = track['album'];
+    String? cover;
+    if (album is Map) cover = album['cover_medium']?.toString();
+    return Song(
+      id: 'deezer:$id',
+      title: track['title']?.toString() ?? 'Untitled',
+      artist: artist is Map ? (artist['name']?.toString() ?? 'Deezer artist') : 'Deezer artist',
+      album: album is Map ? album['title']?.toString() : null,
+      uri: preview,
+      duration: const Duration(seconds: 30),
+      artworkUrl: cover,
+      isOnline: true,
+      isPreview: true,
+    );
+  }
+
+  /// Apple's public iTunes Search API — no key, full Indian catalogue, also
+  /// returns official 30 second previews.
+  Future<List<Song>> _itunes(String term, {int limit = 25}) async {
+    final uri = Uri.https('itunes.apple.com', '/search', <String, String>{
+      'term': term,
+      'country': 'in',
+      'media': 'music',
+      'entity': 'song',
+      'limit': '$limit',
+    });
+    final response = await http.get(uri).timeout(const Duration(seconds: 20));
+    if (response.statusCode != 200) throw const OnlineUnavailable();
+    final decoded = jsonDecode(response.body);
+    if (decoded is! Map) throw const OnlineUnavailable();
+    final results = decoded['results'];
+    if (results is! List) throw const OnlineUnavailable();
+    final songs = <Song>[];
+    for (final item in results) {
+      if (item is! Map) continue;
+      final song = _itunesSong(Map<String, dynamic>.from(item));
+      if (song != null) songs.add(song);
+    }
+    if (songs.isEmpty) throw const OnlineUnavailable();
+    return songs;
+  }
+
+  Song? _itunesSong(Map<String, dynamic> track) {
+    final preview = track['previewUrl']?.toString();
+    final id = track['trackId']?.toString();
+    if (preview == null || preview.isEmpty || id == null) return null;
+    final art = track['artworkUrl100']?.toString();
+    final ms = (track['trackTimeMillis'] as num?)?.toInt() ?? 0;
+    return Song(
+      id: 'itunes:$id',
+      title: track['trackName']?.toString() ?? 'Untitled',
+      artist: track['artistName']?.toString() ?? 'Apple Music artist',
+      album: track['collectionName']?.toString(),
+      uri: preview,
+      duration: Duration(milliseconds: ms == 0 ? 30000 : ms),
+      artworkUrl: art == null ? null : art.replaceAll('100x100', '400x400'),
+      isOnline: true,
+      isPreview: true,
+      genre: track['primaryGenreName']?.toString(),
+    );
+  }
+
   // --------------------------------------------------------------- public ---
 
-  /// Trending this week — Jamendo first (full legal tracks), then Audius,
-  /// then the Internet Archive.
+  /// Trending this week. Jamendo (if a key is set) gives full tracks, then
+  /// Audius, then Deezer's public chart.
   Future<List<Song>> trendingToday({int limit = 16}) => _cached('trending', () => _chain([
         () => _jamendo({'order': 'popularity_week', 'limit': '$limit'}),
         () => _audius('/v1/tracks/trending', {'time': 'week', 'limit': '$limit'}),
+        () => _deezer('/chart/0/tracks', {'limit': '$limit'}),
         () => _run('$_indiaFilter AND mediatype:(audio)', limit, sort: 'downloads desc'),
       ]));
 
-  /// Newest releases first.
+  /// Newest releases first — the freshest Indian tracks we can legally reach.
   Future<List<Song>> newRising({int limit = 16}) => _cached('rising', () => _chain([
         () => _jamendo({'order': 'releasedate_desc', 'limit': '$limit'}),
         () => _audius('/v1/tracks/trending', {'time': 'month', 'limit': '$limit'}),
+        () => _itunes('new hindi songs', limit: limit),
         () => _run('$_indiaFilter AND mediatype:(audio)', limit, sort: 'publicdate desc'),
       ]));
 
@@ -215,6 +306,8 @@ class OnlineMusicService {
     return _cached('g:$term:$limit', () => _chain([
           () => _jamendo({'fuzzytags': _tagFor(term), 'limit': '$limit'}),
           () => _audius('/v1/tracks/search', {'query': _audiusTerm(term), 'limit': '$limit'}),
+          () => _deezer('/search', {'q': _audiusTerm(term), 'limit': '$limit'}),
+          () => _itunes(_audiusTerm(term), limit: limit),
           () => _run('${_alias(term)} AND mediatype:(audio)', limit),
         ]));
   }
@@ -227,6 +320,8 @@ class OnlineMusicService {
       final songs = await _chain([
         () => _jamendo({'search': query, 'limit': '$limit'}),
         () => _audius('/v1/tracks/search', {'query': query, 'limit': '$limit'}),
+        () => _deezer('/search', {'q': query, 'limit': '$limit'}),
+        () => _itunes(query, limit: limit),
         () => _run('$query AND mediatype:(audio)', limit),
       ]);
       return _rank(songs, query);

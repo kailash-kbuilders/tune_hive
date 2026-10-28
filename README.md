@@ -21,10 +21,10 @@ Internet Archive.
 
 ## Online music setup
 
-Jamendo (full legal tracks) needs a free Client ID. See
-[JAMENDO_SETUP.md](JAMENDO_SETUP.md) — one GitHub secret and every build has
-it built in. Without it the app automatically uses Audius and the Internet
-Archive, so the online section still works.
+No account or API key is required: online music comes from Audius (full
+tracks), Deezer and Apple Music (official 30 second previews) and the Internet
+Archive (Creative Commons). Jamendo is an optional extra for full-length CC
+tracks — see [JAMENDO_SETUP.md](JAMENDO_SETUP.md).
 
 ## Run locally
 

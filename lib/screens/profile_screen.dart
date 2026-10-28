@@ -74,17 +74,22 @@ class ProfileScreen extends StatelessWidget {
               ),
               SizedBox(height: 10),
               Text(
-                '2. Jamendo — Creative Commons music ka bada legal catalogue. Full tracks stream hote hain. Iske liye free API key chahiye (Settings me daal do).',
+                '2. Audius — artists apna music khud upload karte hain, full tracks, bina key ke.',
                 style: TextStyle(fontSize: 12.5, height: 1.6),
               ),
               SizedBox(height: 10),
               Text(
-                '3. Audius — artists apna music khud upload karte hain, bina key ke chalta hai.',
+                '3. Deezer aur Apple Music — inke public endpoints se latest Indian songs ka 30 second official preview chalta hai, bina signup ke. Isliye search me naye gaane turant milte hain.',
                 style: TextStyle(fontSize: 12.5, height: 1.6),
               ),
               SizedBox(height: 10),
               Text(
-                '4. Internet Archive — Creative Commons aur public-domain recordings.',
+                '4. Jamendo — optional. Key ho to full legal CC tracks aate hain.',
+                style: TextStyle(fontSize: 12.5, height: 1.6),
+              ),
+              SizedBox(height: 10),
+              Text(
+                '5. Internet Archive — Creative Commons aur public-domain recordings.',
                 style: TextStyle(fontSize: 12.5, height: 1.6),
               ),
               SizedBox(height: 14),
@@ -300,7 +305,7 @@ class ProfileScreen extends StatelessWidget {
               subtitle: hasBuiltInJamendoClientId
                   ? 'Build me set hai · full tracks chalu'
                   : library.jamendoClientId == null
-                      ? 'Set karo — legal full tracks online'
+                      ? 'Optional — bina key bhi online chalta hai'
                       : 'Set hai · full tracks chalu',
               onTap: () => _editJamendo(context),
             ),

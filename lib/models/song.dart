@@ -12,6 +12,7 @@ class Song {
     this.deviceId,
     this.albumId,
     this.isOnline = false,
+    this.isPreview = false,
     this.genre,
   });
 
@@ -25,10 +26,13 @@ class Song {
   final int? deviceId;
   final int? albumId;
   final bool isOnline;
+
+  /// True when only a 30 second official clip can be streamed (Deezer/iTunes).
+  final bool isPreview;
   final String? genre;
 
   String get subtitle {
-    if (isOnline) return artist;
+    if (isOnline) return isPreview ? '$artist · 30s preview' : artist;
     final a = artist.trim();
     return a.isEmpty || a == '<unknown>' ? 'Unknown artist' : a;
   }
@@ -52,6 +56,7 @@ class Song {
         'deviceId': deviceId,
         'albumId': albumId,
         'isOnline': isOnline,
+        'isPreview': isPreview,
         'genre': genre,
       };
 
@@ -66,6 +71,7 @@ class Song {
         deviceId: (json['deviceId'] as num?)?.toInt(),
         albumId: (json['albumId'] as num?)?.toInt(),
         isOnline: json['isOnline'] as bool? ?? false,
+        isPreview: json['isPreview'] as bool? ?? false,
         genre: json['genre'] as String?,
       );
 }
