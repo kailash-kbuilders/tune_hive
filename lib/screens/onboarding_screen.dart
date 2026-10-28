@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../services/library_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/gradient_bg.dart';
+import '../widgets/slide_to_start.dart';
 import 'root_shell.dart';
 
 class OnboardingScreen extends StatefulWidget {
@@ -101,51 +102,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> with SingleTickerPr
                           style: TextStyle(fontSize: 12.5, height: 1.6, color: AppColors.muted.withOpacity(0.95)),
                         ),
                         const SizedBox(height: 28),
-                        Row(
-                          children: [
-                            GestureDetector(
-                              onTap: _start,
-                              child: Container(
-                                height: 54,
-                                width: 54,
-                                decoration: const BoxDecoration(
-                                  color: AppColors.lime,
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Icon(Icons.play_arrow_rounded,
-                                    color: Color(0xFF10160A), size: 28),
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: GestureDetector(
-                                onTap: _start,
-                                behavior: HitTestBehavior.opaque,
-                                child: Text(
-                                  'Turn on your music',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w500,
-                                    color: AppColors.text.withOpacity(0.9),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            GestureDetector(
-                              onTap: _start,
-                              child: Container(
-                                height: 44,
-                                width: 44,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: AppColors.card,
-                                  border: Border.all(color: AppColors.line),
-                                ),
-                                child: const Icon(Icons.headphones_rounded,
-                                    size: 20, color: AppColors.lime),
-                              ),
-                            ),
-                          ],
+                        SlideToStart(
+                          label: 'Slide to start',
+                          onCompleted: _start,
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'Slider ko aage kheencho — music turant shuru.',
+                          style: TextStyle(fontSize: 11.5, color: AppColors.muted.withOpacity(0.8)),
                         ),
                         const SizedBox(height: 26),
                       ],
