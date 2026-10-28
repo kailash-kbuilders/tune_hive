@@ -61,16 +61,28 @@ NOTIFICATION_ICON = """<?xml version="1.0" encoding="utf-8"?>
 """
 
 
+KEEP_RULE = """<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@drawable/ic_stat_tunehive" />
+"""
+
+
 def write_notification_icon() -> None:
     """A white headphones silhouette for the status bar.
 
     Without this the notification uses mipmap/ic_launcher, which Android
-    renders as an ugly white square.
+    renders as an ugly white square. The keep rule matters: the drawable is
+    only referenced by name from Dart, so resource shrinking would otherwise
+    delete it from the release APK.
     """
     target = pathlib.Path("android/app/src/main/res/drawable/ic_stat_tunehive.xml")
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(NOTIFICATION_ICON)
-    print("notification icon written")
+
+    keep = pathlib.Path("android/app/src/main/res/raw/keep.xml")
+    keep.parent.mkdir(parents=True, exist_ok=True)
+    keep.write_text(KEEP_RULE)
+    print("notification icon + keep rule written")
 
 
 def patch_main_activity() -> None:
