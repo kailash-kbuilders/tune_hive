@@ -98,7 +98,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> with SingleTickerPr
                         ),
                         const SizedBox(height: 12),
                         Text(
-                          'Apne device ke gaane aur duniya bhar ka free Creative Commons music — sab ek jagah, clean aur simple.',
+                          'Tumhare phone ke saare gaane — ek clean, minimal player me. Koi account nahi, koi internet nahi.',
                           style: TextStyle(fontSize: 12.5, height: 1.6, color: AppColors.muted.withOpacity(0.95)),
                         ),
                         const SizedBox(height: 28),

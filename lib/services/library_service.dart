@@ -14,12 +14,10 @@ class LibraryService extends ChangeNotifier {
   static const _kPlaylists = 'playlists';
   static const _kName = 'listener_name';
   static const _kCounts = 'play_counts';
-  static const _kJamendo = 'jamendo_client_id';
 
   SharedPreferences? _prefs;
   bool _onboarded = false;
   String _listenerName = 'Music Lover';
-  String? _jamendoClientId;
   final List<Song> _favourites = [];
   final List<Song> _recent = [];
   final Map<String, List<Song>> _playlists = {};
@@ -36,7 +34,6 @@ class LibraryService extends ChangeNotifier {
     _prefs = prefs;
     _onboarded = prefs.getBool(_kOnboarded) ?? false;
     _listenerName = prefs.getString(_kName) ?? 'Music Lover';
-    _jamendoClientId = prefs.getString(_kJamendo);
     _favourites
       ..clear()
       ..addAll(_decodeList(prefs.getString(_kFavourites)));
@@ -103,19 +100,6 @@ class LibraryService extends ChangeNotifier {
     _listenerName = clean;
     notifyListeners();
     await _prefs?.setString(_kName, clean);
-  }
-
-  String? get jamendoClientId => _jamendoClientId;
-
-  Future<void> setJamendoClientId(String? id) async {
-    final clean = (id == null || id.trim().isEmpty) ? null : id.trim();
-    _jamendoClientId = clean;
-    notifyListeners();
-    if (clean == null) {
-      await _prefs?.remove(_kJamendo);
-    } else {
-      await _prefs?.setString(_kJamendo, clean);
-    }
   }
 
   bool isFavourite(Song song) => _favourites.any((s) => s.id == song.id);

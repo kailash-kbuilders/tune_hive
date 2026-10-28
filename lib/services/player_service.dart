@@ -7,7 +7,6 @@ import 'dart:ui' as ui;
 import 'package:audio_service/audio_service.dart';
 import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
 import 'package:just_audio/just_audio.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -470,14 +469,10 @@ class PlayerService extends BaseAudioHandler with QueueHandler, SeekHandler, Cha
   }
 
   Future<Uint8List?> _artBytes(Song song) async {
+    final deviceId = song.deviceId;
+    if (deviceId == null) return null;
     try {
-      if (song.deviceId != null) return ArtworkCache.load(song.deviceId!);
-      final url = song.artworkUrl;
-      if (url == null || url.isEmpty) return null;
-      final response =
-          await http.get(Uri.parse(url)).timeout(const Duration(seconds: 15));
-      if (response.statusCode != 200) return null;
-      return response.bodyBytes;
+      return await ArtworkCache.load(deviceId);
     } catch (_) {
       return null;
     }
