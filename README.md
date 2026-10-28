@@ -19,6 +19,13 @@ Internet Archive.
 - Permissions asked for: audio files, notifications (for the playback
   controls) and internet. Nothing else.
 
+## Online music setup
+
+Jamendo (full legal tracks) needs a free Client ID. See
+[JAMENDO_SETUP.md](JAMENDO_SETUP.md) — one GitHub secret and every build has
+it built in. Without it the app automatically uses Audius and the Internet
+Archive, so the online section still works.
+
 ## Run locally
 
 ```

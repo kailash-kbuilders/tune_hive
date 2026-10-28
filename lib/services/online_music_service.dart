@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../config.dart';
 import '../models/song.dart';
 
 class OnlineUnavailable implements Exception {
@@ -38,6 +39,11 @@ class OnlineMusicService {
 
   Future<String?> _jamendoKey() async {
     if (_clientId != null) return _clientId;
+    // Baked into the build — the normal case for a released APK.
+    if (kBuiltInJamendoClientId.trim().isNotEmpty) {
+      _clientId = kBuiltInJamendoClientId.trim();
+      return _clientId;
+    }
     try {
       final prefs = await SharedPreferences.getInstance();
       final stored = prefs.getString(_kJamendoKey);

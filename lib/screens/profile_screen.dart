@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../config.dart';
 import '../services/device_music_service.dart';
 import '../services/library_service.dart';
 import '../services/online_music_service.dart';
@@ -296,9 +297,11 @@ class ProfileScreen extends StatelessWidget {
             _Tile(
               icon: Icons.vpn_key_rounded,
               title: 'Jamendo API key',
-              subtitle: library.jamendoClientId == null
-                  ? 'Set karo — legal full tracks online'
-                  : 'Set hai · full tracks chalu',
+              subtitle: hasBuiltInJamendoClientId
+                  ? 'Build me set hai · full tracks chalu'
+                  : library.jamendoClientId == null
+                      ? 'Set karo — legal full tracks online'
+                      : 'Set hai · full tracks chalu',
               onTap: () => _editJamendo(context),
             ),
             _Tile(
