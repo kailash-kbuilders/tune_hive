@@ -227,6 +227,10 @@ class PlayerScreen extends StatelessWidget {
                       onTap: () => showSleepSheet(context),
                     ),
                     _RoundIcon(
+                      icon: Icons.graphic_eq_rounded,
+                      onTap: () => showEqualizerSheet(context),
+                    ),
+                    _RoundIcon(
                       icon: Icons.replay_10_rounded,
                       onTap: player.skipBackward,
                     ),
@@ -333,6 +337,7 @@ class _RoundIcon extends StatelessWidget {
   Widget build(BuildContext context) {
     return IconButton(
       onPressed: onTap,
+      visualDensity: VisualDensity.compact,
       icon: Icon(
         icon,
         size: size,

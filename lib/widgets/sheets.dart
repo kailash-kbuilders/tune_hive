@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:just_audio/just_audio.dart' show AndroidEqualizerParameters;
 import 'package:provider/provider.dart';
 
 import '../models/song.dart';
@@ -432,4 +433,185 @@ Widget _infoLine(String label, String value) {
       ],
     ),
   );
+}
+
+
+// --------------------------------------------------------------- equalizer --
+
+String _freqLabel(double hz) {
+  if (hz >= 1000) {
+    final k = hz / 1000;
+    return '${k.toStringAsFixed(k >= 10 ? 0 : 1)}k';
+  }
+  return hz.round().toString();
+}
+
+Future<void> showEqualizerSheet(BuildContext context) async {
+  final player = context.read<PlayerService>();
+  final messenger = ScaffoldMessenger.of(context);
+  if (!player.equalizerSupported) {
+    messenger.showSnackBar(
+      const SnackBar(content: Text('Equalizer sirf Android devices pe milta hai')),
+    );
+    return;
+  }
+  final params = await player.equalizerParameters();
+  if (params == null) {
+    messenger.showSnackBar(
+      const SnackBar(
+        content: Text('Pehle koi gaana play karo — uske baad equalizer set ho jaata hai'),
+      ),
+    );
+    return;
+  }
+  if (!context.mounted) return;
+  await showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: AppColors.card,
+    isScrollControlled: true,
+    builder: (_) => _EqualizerSheet(player: player, params: params),
+  );
+}
+
+class _EqualizerSheet extends StatefulWidget {
+  const _EqualizerSheet({required this.player, required this.params});
+
+  final PlayerService player;
+  final AndroidEqualizerParameters params;
+
+  @override
+  State<_EqualizerSheet> createState() => _EqualizerSheetState();
+}
+
+class _EqualizerSheetState extends State<_EqualizerSheet> {
+  late bool _enabled = widget.player.equalizerEnabled;
+  late final List<double> _gains =
+      widget.params.bands.map((band) => band.gain).toList();
+
+  void _applyPreset(String name) {
+    final bands = widget.params.bands;
+    final max = widget.params.maxDecibels;
+    final min = widget.params.minDecibels;
+    for (var i = 0; i < bands.length; i++) {
+      double gain;
+      switch (name) {
+        case 'Bass':
+          gain = i <= 1 ? max * 0.75 : (i == 2 ? max * 0.25 : 0);
+          break;
+        case 'Vocal':
+          gain = i == bands.length ~/ 2 ? max * 0.55 : 0;
+          break;
+        case 'Treble':
+          gain = i >= bands.length - 2 ? max * 0.65 : 0;
+          break;
+        default:
+          gain = 0;
+      }
+      final value = gain.clamp(min, max);
+      setState(() => _gains[i] = value);
+      bands[i].setGain(value);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bands = widget.params.bands;
+    final min = widget.params.minDecibels;
+    final max = widget.params.maxDecibels;
+
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _sheetHandle(),
+            Row(
+              children: [
+                Expanded(
+                  child: _sheetTitle(
+                    context,
+                    'Equalizer',
+                    subtitle: '${bands.length} bands · sirf is device pe',
+                  ),
+                ),
+                Switch(
+                  value: _enabled,
+                  activeColor: AppColors.lime,
+                  onChanged: (value) async {
+                    setState(() => _enabled = value);
+                    await widget.player.setEqualizerEnabled(value);
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                for (final preset in const ['Flat', 'Bass', 'Vocal', 'Treble'])
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: GestureDetector(
+                      onTap: () => _applyPreset(preset),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: AppColors.cardSoft,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppColors.line),
+                        ),
+                        child: Text(
+                          preset,
+                          style: const TextStyle(fontSize: 12, color: AppColors.text),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            for (var i = 0; i < bands.length; i++)
+              Row(
+                children: [
+                  SizedBox(
+                    width: 44,
+                    child: Text(
+                      _freqLabel(bands[i].centerFrequency),
+                      style: const TextStyle(fontSize: 11, color: AppColors.muted),
+                    ),
+                  ),
+                  Expanded(
+                    child: Slider(
+                      value: _gains[i].clamp(min, max),
+                      min: min,
+                      max: max,
+                      onChanged: (value) {
+                        setState(() => _gains[i] = value);
+                        bands[i].setGain(value);
+                      },
+                    ),
+                  ),
+                  SizedBox(
+                    width: 42,
+                    child: Text(
+                      '${_gains[i] > 0 ? '+' : ''}${_gains[i].toStringAsFixed(1)}',
+                      textAlign: TextAlign.right,
+                      style: const TextStyle(fontSize: 11, color: AppColors.muted),
+                    ),
+                  ),
+                ],
+              ),
+            const SizedBox(height: 6),
+            Text(
+              _enabled
+                  ? 'Bands ko upar-neeche karke apna sound banao.'
+                  : 'Equalizer band hai — upar switch on kar do.',
+              style: const TextStyle(fontSize: 11.5, color: AppColors.muted, height: 1.5),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

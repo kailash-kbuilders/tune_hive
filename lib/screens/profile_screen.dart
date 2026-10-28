@@ -274,7 +274,7 @@ class ProfileScreen extends StatelessWidget {
             _Tile(
               icon: Icons.queue_rounded,
               title: 'Current queue',
-              subtitle: '${player.queue.length} tracks',
+              subtitle: '${player.songs.length} tracks',
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const QueueScreen()),
               ),
@@ -296,6 +296,14 @@ class ProfileScreen extends StatelessWidget {
               title: 'Playback speed',
               subtitle: speedLabel(player.speed),
               onTap: () => showSpeedSheet(context),
+            ),
+            _Tile(
+              icon: Icons.graphic_eq_rounded,
+              title: 'Equalizer',
+              subtitle: player.equalizerSupported
+                  ? 'Bass, vocal aur treble adjust karo'
+                  : 'Sirf Android devices pe',
+              onTap: () => showEqualizerSheet(context),
             ),
             const SizedBox(height: 18),
             const _GroupLabel('About'),

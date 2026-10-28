@@ -1,5 +1,5 @@
+import 'package:audio_service/audio_service.dart';
 import 'package:flutter/material.dart';
-import 'package:just_audio_background/just_audio_background.dart';
 import 'package:provider/provider.dart';
 
 import 'screens/onboarding_screen.dart';
@@ -12,28 +12,44 @@ import 'theme/app_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Lock-screen controls + background playback.
-  await JustAudioBackground.init(
-    androidNotificationChannelId: 'com.tunehive.playback',
-    androidNotificationChannelName: 'TuneHive playback',
-    androidNotificationOngoing: true,
-  );
   final library = LibraryService();
   await library.load();
-  runApp(TuneHiveApp(library: library));
+
+  // audio_service owns the notification and lock-screen controls. We give it
+  // only previous / play-pause / next, so there is no stop button to close the
+  // player by accident.
+  final playerService = await AudioService.init<PlayerService>(
+    builder: PlayerService.new,
+    config: const AudioServiceConfig(
+      androidNotificationChannelId: 'com.tunehive.playback',
+      androidNotificationChannelName: 'TuneHive playback',
+      androidNotificationChannelDescription: 'Music controls for TuneHive',
+      androidNotificationIcon: 'drawable/ic_stat_tunehive',
+      notificationColor: Color(0xFFB9F04A),
+      androidNotificationOngoing: true,
+      androidStopForegroundOnPause: true,
+      androidNotificationClickStartsActivity: true,
+      preloadArtwork: true,
+      artDownscaleWidth: 512,
+      artDownscaleHeight: 512,
+    ),
+  );
+
+  runApp(TuneHiveApp(library: library, playerService: playerService));
 }
 
 class TuneHiveApp extends StatelessWidget {
-  const TuneHiveApp({super.key, required this.library});
+  const TuneHiveApp({super.key, required this.library, required this.playerService});
 
   final LibraryService library;
+  final PlayerService playerService;
 
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider<LibraryService>.value(value: library),
-        ChangeNotifierProvider<PlayerService>(create: (_) => PlayerService()),
+        ChangeNotifierProvider<PlayerService>.value(value: playerService),
         ChangeNotifierProvider<DeviceMusicService>(create: (_) => DeviceMusicService()),
         Provider<OnlineMusicService>(create: (_) => OnlineMusicService()),
       ],

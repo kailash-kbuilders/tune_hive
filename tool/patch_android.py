@@ -48,6 +48,31 @@ SERVICE = """        <service
 """
 
 
+NOTIFICATION_ICON = """<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M12,3C7.03,3 3,7.03 3,12v6c0,1.1 0.9,2 2,2h1c0.55,0 1,-0.45 1,-1v-5c0,-0.55 -0.45,-1 -1,-1H5v-1c0,-3.87 3.13,-7 7,-7s7,3.13 7,7v1h-1c-0.55,0 -1,0.45 -1,1v5c0,0.55 0.45,1 1,1h1c1.1,0 2,-0.9 2,-2v-6c0,-4.97 -4.03,-9 -9,-9z" />
+</vector>
+"""
+
+
+def write_notification_icon() -> None:
+    """A white headphones silhouette for the status bar.
+
+    Without this the notification uses mipmap/ic_launcher, which Android
+    renders as an ugly white square.
+    """
+    target = pathlib.Path("android/app/src/main/res/drawable/ic_stat_tunehive.xml")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(NOTIFICATION_ICON)
+    print("notification icon written")
+
+
 def patch_main_activity() -> None:
     """audio_service needs MainActivity to extend AudioServiceActivity."""
     root = pathlib.Path("android/app/src/main/kotlin")
@@ -107,6 +132,7 @@ def main() -> None:
     text = re.sub(r'android:label="[^"]*"', 'android:label="TuneHive"', text)
     MANIFEST.write_text(text)
     print("manifest patched")
+    write_notification_icon()
     patch_main_activity()
 
 

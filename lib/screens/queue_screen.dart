@@ -14,7 +14,7 @@ class QueueScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final player = context.watch<PlayerService>();
-    final songs = player.queue;
+    final songs = player.songs;
 
     return Scaffold(
       body: GradientBg(

@@ -1,26 +1,37 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 
+import 'package:audio_service/audio_service.dart';
 import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import 'package:just_audio/just_audio.dart';
-import 'package:just_audio_background/just_audio_background.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../models/song.dart';
+import 'device_music_service.dart';
 
 enum TrackRepeatMode { off, all, one }
 
-/// Owns the single AudioPlayer for the whole app: queue, shuffle, repeat,
-/// speed and the sleep timer. Background playback and the lock-screen
-/// controls come from just_audio_background.
-class PlayerService extends ChangeNotifier {
+/// The playback engine and the lock-screen / notification service in one.
+///
+/// It extends BaseAudioHandler so the notification shows only previous,
+/// play/pause and next — no stop button — and every track gets a softly
+/// blurred version of its artwork as the notification image.
+class PlayerService extends BaseAudioHandler with QueueHandler, SeekHandler, ChangeNotifier {
   PlayerService() {
     _init();
   }
 
-  final AudioPlayer _player = AudioPlayer();
-  final List<Song> _queue = [];
-  List<int> _order = [];
-  int _orderPos = 0;
+  final AndroidEqualizer _equalizer = AndroidEqualizer();
+  late final AudioPlayer _player = AudioPlayer(
+    audioPipeline: AudioPipeline(androidAudioEffects: [_equalizer]),
+  );
+
+  final List<Song> _songs = [];
+  final Map<String, Uri?> _artCache = {};
 
   Song? _current;
   bool _shuffle = false;
@@ -31,12 +42,13 @@ class PlayerService extends ChangeNotifier {
 
   Timer? _sleepTimer;
   Timer? _sleepTicker;
+  Timer? _positionTicker;
   DateTime? _sleepAt;
   bool _stopAtTrackEnd = false;
 
   AudioPlayer get player => _player;
   Song? get current => _current;
-  List<Song> get queue => List.unmodifiable(_queue);
+  List<Song> get songs => List.unmodifiable(_songs);
   bool get shuffleOn => _shuffle;
   TrackRepeatMode get repeatMode => _repeat;
   double get speed => _speed;
@@ -55,95 +67,86 @@ class PlayerService extends ChangeNotifier {
     return left.isNegative ? Duration.zero : left;
   }
 
+  bool get equalizerSupported => !kIsWeb && Platform.isAndroid;
+  bool get equalizerEnabled => _equalizer.enabled;
+
   Future<void> _init() async {
     try {
       final session = await AudioSession.instance;
       await session.configure(const AudioSessionConfiguration.music());
     } catch (_) {
-      // Audio focus is best-effort; playback still works without it.
+      // Audio focus is best effort.
     }
+
     _player.playerStateStream.listen((state) {
+      _broadcastState();
       if (state.processingState == ProcessingState.completed) {
         _handleCompleted();
       }
       notifyListeners();
     });
-    _player.errorStream.listen((e) {
-      _error = e.message ?? 'Playback error';
+
+    _player.currentIndexStream.listen((index) {
+      if (index == null || index < 0 || index >= _songs.length) return;
+      _current = _songs[index];
+      mediaItem.add(_mediaItemFor(_current!));
+      unawaited(_refreshArt(_current!));
+      _broadcastState();
       notifyListeners();
+    });
+
+    _player.errorStream.listen((error) {
+      _error = error.message ?? 'Playback error';
+      notifyListeners();
+    });
+
+    _positionTicker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (_player.playing) _broadcastState();
     });
   }
 
-  void _handleCompleted() {
-    if (_stopAtTrackEnd) {
-      _stopAtTrackEnd = false;
-      _clearSleep();
-      _player.pause();
-      _player.seek(Duration.zero);
-      notifyListeners();
-      return;
-    }
-    if (_repeat == TrackRepeatMode.one) {
-      _player.seek(Duration.zero);
-      unawaited(_player.play());
-      return;
-    }
-    unawaited(next());
-  }
+  // ------------------------------------------------------------ playback ---
 
-  /// Replace the queue and start playing at [startIndex].
+  /// Replaces the queue and starts at [startIndex].
   Future<void> playSongs(List<Song> songs, int startIndex) async {
     if (songs.isEmpty) return;
-    _queue
+    final selected = songs[startIndex.clamp(0, songs.length - 1)];
+    _songs
       ..clear()
-      ..addAll(songs);
-    final start = startIndex.clamp(0, _queue.length - 1);
-    _order = List<int>.generate(_queue.length, (i) => i);
-    if (_shuffle) {
-      _order.shuffle();
-      _order.remove(start);
-      _order.insert(0, start);
-      _orderPos = 0;
-    } else {
-      _orderPos = start;
-    }
-    await _load(autoPlay: true);
+      ..addAll(songs.where((song) => song.uri.isNotEmpty));
+    if (_songs.isEmpty) return;
+    var start = _songs.indexWhere((song) => song.id == selected.id);
+    if (start < 0) start = 0;
+    await _loadSources(initialIndex: start, autoPlay: true);
   }
 
-  Future<void> addNext(Song song) async {
-    if (_queue.isEmpty) {
-      await playSongs([song], 0);
-      return;
+  Future<void> _loadSources({
+    required int initialIndex,
+    required bool autoPlay,
+    Duration? position,
+  }) async {
+    final sources = <AudioSource>[];
+    final items = <MediaItem>[];
+    for (final song in _songs) {
+      final item = _mediaItemFor(song);
+      items.add(item);
+      sources.add(AudioSource.uri(Uri.parse(song.uri), tag: item));
     }
-    _queue.add(song);
-    _order.add(_queue.length - 1);
-    notifyListeners();
-  }
+    if (sources.isEmpty) return;
 
-  Future<void> _load({required bool autoPlay}) async {
-    if (_order.isEmpty || _queue.isEmpty) return;
-    final song = _queue[_order[_orderPos]];
-    _current = song;
-    _error = null;
     _loadingTrack = true;
+    _error = null;
     notifyListeners();
     try {
-      if (song.uri.isEmpty) throw StateError('Track has no source');
-      await _player.setAudioSource(
-        AudioSource.uri(
-          Uri.parse(song.uri),
-          tag: MediaItem(
-            id: song.id,
-            title: song.title,
-            artist: song.subtitle,
-            album: song.album ?? 'TuneHive',
-            artUri: (song.artworkUrl != null && song.artworkUrl!.isNotEmpty)
-                ? Uri.parse(song.artworkUrl!)
-                : null,
-          ),
-        ),
+      queue.add(items);
+      await _player.setAudioSources(
+        sources,
+        initialIndex: initialIndex.clamp(0, sources.length - 1),
+        initialPosition: position ?? Duration.zero,
       );
       await _player.setSpeed(_speed);
+      await _player.setLoopMode(_loopMode);
+      await _player.setShuffleModeEnabled(_shuffle);
       if (autoPlay) unawaited(_player.play());
     } catch (_) {
       _error = 'Ye track play nahi ho paya';
@@ -153,8 +156,17 @@ class PlayerService extends ChangeNotifier {
     }
   }
 
+  MediaItem _mediaItemFor(Song song) => MediaItem(
+        id: song.id,
+        title: song.title,
+        artist: song.subtitle,
+        album: song.album ?? 'TuneHive',
+        duration: song.duration.inSeconds > 0 ? song.duration : null,
+        artUri: _artCache[song.id],
+      );
+
   Future<void> toggle() async {
-    if (_current == null) return;
+    if (_songs.isEmpty) return;
     if (_player.processingState == ProcessingState.completed) {
       await _player.seek(Duration.zero);
       await _player.play();
@@ -167,61 +179,37 @@ class PlayerService extends ChangeNotifier {
     }
   }
 
-  Future<void> next() async {
-    if (_order.isEmpty) return;
-    if (_orderPos + 1 < _order.length) {
-      _orderPos++;
-      await _load(autoPlay: true);
-    } else if (_repeat == TrackRepeatMode.all) {
-      _orderPos = 0;
-      await _load(autoPlay: true);
-    } else {
-      await _player.pause();
-      await _player.seek(Duration.zero);
-    }
+  Future<void> next() => skipToNext();
+
+  Future<void> previous() => skipToPrevious();
+
+  @override
+  Future<void> play() => _player.play();
+
+  @override
+  Future<void> pause() => _player.pause();
+
+  @override
+  Future<void> seek(Duration position) => _player.seek(position);
+
+  @override
+  Future<void> skipToNext() async {
+    if (_player.hasNext) await _player.seekToNext();
   }
 
-  Future<void> previous() async {
-    if (_order.isEmpty) return;
-    if (_player.position.inSeconds > 4) {
+  @override
+  Future<void> skipToPrevious() async {
+    if (_player.position.inSeconds > 4 || !_player.hasPrevious) {
       await _player.seek(Duration.zero);
       return;
     }
-    if (_orderPos > 0) {
-      _orderPos--;
-      await _load(autoPlay: true);
-    } else {
-      await _player.seek(Duration.zero);
-    }
+    await _player.seekToPrevious();
   }
 
-  Future<void> playAt(int queueIndex) async {
-    final pos = _order.indexOf(queueIndex);
-    if (pos < 0) return;
-    _orderPos = pos;
-    await _load(autoPlay: true);
-  }
-
-  /// Drag-and-drop reorder in the queue screen. The currently playing track
-  /// keeps playing; only the order around it changes.
-  void reorderQueue(int oldIndex, int newIndex) {
-    if (oldIndex < 0 || oldIndex >= _queue.length) return;
-    if (newIndex > oldIndex) newIndex -= 1;
-    final currentId = _current?.id;
-    final song = _queue.removeAt(oldIndex);
-    _queue.insert(newIndex.clamp(0, _queue.length), song);
-    _order = List<int>.generate(_queue.length, (i) => i);
-    final currentPos = currentId == null ? -1 : _queue.indexWhere((s) => s.id == currentId);
-    _orderPos = currentPos < 0 ? 0 : currentPos;
-    notifyListeners();
-  }
-
-  Future<void> seek(Duration to) async {
-    var target = to;
-    if (target.isNegative) target = Duration.zero;
-    final total = _player.duration;
-    if (total != null && target > total) target = total;
-    await _player.seek(target);
+  Future<void> playAt(int index) async {
+    if (index < 0 || index >= _songs.length) return;
+    await _player.seek(Duration.zero, index: index);
+    if (!_player.playing) await _player.play();
   }
 
   Future<void> skipForward() => seek(_player.position + const Duration(seconds: 10));
@@ -238,20 +226,8 @@ class PlayerService extends ChangeNotifier {
 
   void toggleShuffle() {
     _shuffle = !_shuffle;
-    if (_queue.isEmpty) {
-      notifyListeners();
-      return;
-    }
-    final currentIndex = _order.isEmpty ? 0 : _order[_orderPos];
-    if (_shuffle) {
-      _order = List<int>.generate(_queue.length, (i) => i)..shuffle();
-      _order.remove(currentIndex);
-      _order.insert(0, currentIndex);
-      _orderPos = 0;
-    } else {
-      _order = List<int>.generate(_queue.length, (i) => i);
-      _orderPos = currentIndex;
-    }
+    unawaited(_player.setShuffleModeEnabled(_shuffle));
+    _broadcastState();
     notifyListeners();
   }
 
@@ -267,8 +243,85 @@ class PlayerService extends ChangeNotifier {
         _repeat = TrackRepeatMode.off;
         break;
     }
+    unawaited(_player.setLoopMode(_loopMode));
+    _broadcastState();
     notifyListeners();
   }
+
+  LoopMode get _loopMode => switch (_repeat) {
+        TrackRepeatMode.off => LoopMode.off,
+        TrackRepeatMode.all => LoopMode.all,
+        TrackRepeatMode.one => LoopMode.one,
+      };
+
+  Future<void> addNext(Song song) async {
+    if (song.uri.isEmpty) return;
+    if (_songs.isEmpty) {
+      await playSongs([song], 0);
+      return;
+    }
+    final currentIndex = _player.currentIndex ?? 0;
+    _songs.insert((currentIndex + 1).clamp(0, _songs.length), song);
+    await _loadSources(
+      initialIndex: currentIndex,
+      autoPlay: _player.playing,
+      position: _player.position,
+    );
+  }
+
+  /// Drag-and-drop reorder in the queue screen; the current track keeps
+  /// playing from where it was.
+  Future<void> reorderQueue(int oldIndex, int newIndex) async {
+    if (oldIndex < 0 || oldIndex >= _songs.length) return;
+    if (newIndex > oldIndex) newIndex -= 1;
+    final currentSong = _current;
+    final position = _player.position;
+    final playing = _player.playing;
+    final song = _songs.removeAt(oldIndex);
+    _songs.insert(newIndex.clamp(0, _songs.length), song);
+    var index = currentSong == null ? 0 : _songs.indexWhere((s) => s.id == currentSong.id);
+    if (index < 0) index = 0;
+    await _loadSources(initialIndex: index, autoPlay: playing, position: position);
+  }
+
+  void _handleCompleted() {
+    if (_stopAtTrackEnd) {
+      _stopAtTrackEnd = false;
+      _clearSleep();
+      _player.pause();
+      _player.seek(Duration.zero);
+      notifyListeners();
+      return;
+    }
+    if (_repeat == TrackRepeatMode.one) {
+      _player.seek(Duration.zero);
+      unawaited(_player.play());
+      return;
+    }
+    if (!_player.hasNext) unawaited(_player.pause());
+  }
+
+  // ---------------------------------------------------------- equalizer ---
+
+  Future<AndroidEqualizerParameters?> equalizerParameters() async {
+    if (!equalizerSupported) return null;
+    try {
+      return await _equalizer.parameters.timeout(const Duration(seconds: 4));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> setEqualizerEnabled(bool value) async {
+    try {
+      await _equalizer.setEnabled(value);
+    } catch (_) {
+      // Some devices have no equalizer effect.
+    }
+    notifyListeners();
+  }
+
+  // -------------------------------------------------------- sleep timer ---
 
   void setSleepTimer(Duration? after) {
     _sleepTimer?.cancel();
@@ -322,10 +375,108 @@ class PlayerService extends ChangeNotifier {
     notifyListeners();
   }
 
+  // --------------------------------------------------- notification bits ---
+
+  void _broadcastState() {
+    final playing = _player.playing;
+    playbackState.add(PlaybackState(
+      controls: [
+        MediaControl.skipToPrevious,
+        if (playing) MediaControl.pause else MediaControl.play,
+        MediaControl.skipToNext,
+      ],
+      androidCompactActionIndices: const [0, 1, 2],
+      systemActions: const {MediaAction.seek},
+      processingState: _processingState(_player.processingState),
+      playing: playing,
+      updatePosition: _player.position,
+      bufferedPosition: _player.bufferedPosition,
+      speed: _player.speed,
+      queueIndex: _player.currentIndex,
+      repeatMode: switch (_repeat) {
+        TrackRepeatMode.off => AudioServiceRepeatMode.none,
+        TrackRepeatMode.all => AudioServiceRepeatMode.all,
+        TrackRepeatMode.one => AudioServiceRepeatMode.one,
+      },
+      shuffleMode:
+          _shuffle ? AudioServiceShuffleMode.all : AudioServiceShuffleMode.none,
+    ));
+  }
+
+  AudioProcessingState _processingState(ProcessingState state) => switch (state) {
+        ProcessingState.idle => AudioProcessingState.idle,
+        ProcessingState.loading => AudioProcessingState.loading,
+        ProcessingState.buffering => AudioProcessingState.buffering,
+        ProcessingState.ready => AudioProcessingState.ready,
+        ProcessingState.completed => AudioProcessingState.completed,
+      };
+
+  Future<void> _refreshArt(Song song) async {
+    if (!_artCache.containsKey(song.id)) {
+      _artCache[song.id] = await _blurredArt(song);
+    }
+    final art = _artCache[song.id];
+    final item = mediaItem.value;
+    if (art != null && item != null && item.id == song.id && item.artUri != art) {
+      mediaItem.add(item.copyWith(artUri: art));
+    }
+  }
+
+  Future<Uint8List?> _artBytes(Song song) async {
+    try {
+      if (song.deviceId != null) return ArtworkCache.load(song.deviceId!);
+      final url = song.artworkUrl;
+      if (url == null || url.isEmpty) return null;
+      final response =
+          await http.get(Uri.parse(url)).timeout(const Duration(seconds: 15));
+      if (response.statusCode != 200) return null;
+      return response.bodyBytes;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// A soft blur — readable as art, not a sharp photo.
+  Future<Uri?> _blurredArt(Song song) async {
+    try {
+      final bytes = await _artBytes(song);
+      if (bytes == null || bytes.isEmpty) return null;
+      final codec = await ui.instantiateImageCodec(bytes, targetWidth: 512);
+      final frame = await codec.getNextFrame();
+      final image = frame.image;
+      final width = image.width;
+      final height = image.height;
+      final recorder = ui.PictureRecorder();
+      final canvas = ui.Canvas(recorder);
+      final paint = ui.Paint()
+        ..imageFilter =
+            ui.ImageFilter.blur(sigmaX: 16, sigmaY: 16, tileMode: ui.TileMode.clamp);
+      canvas.drawImageRect(
+        image,
+        ui.Rect.fromLTWH(0, 0, width.toDouble(), height.toDouble()),
+        ui.Rect.fromLTWH(-30, -30, width + 60.0, height + 60.0),
+        paint,
+      );
+      final picture = recorder.endRecording();
+      final blurred = await picture.toImage(width, height);
+      final data = await blurred.toByteData(format: ui.ImageByteFormat.png);
+      image.dispose();
+      blurred.dispose();
+      if (data == null) return null;
+      final directory = await getTemporaryDirectory();
+      final file = File('${directory.path}/notif_${song.id.hashCode}.png');
+      await file.writeAsBytes(data.buffer.asUint8List(), flush: true);
+      return Uri.file(file.path);
+    } catch (_) {
+      return null;
+    }
+  }
+
   @override
   void dispose() {
     _sleepTimer?.cancel();
     _sleepTicker?.cancel();
+    _positionTicker?.cancel();
     _player.dispose();
     super.dispose();
   }
