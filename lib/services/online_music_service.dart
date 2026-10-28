@@ -17,13 +17,33 @@ class OnlineMusicService {
 
   final Map<String, List<Song>> _cache = {};
 
+  /// Broadens a category name into the terms the archive actually uses, so
+  /// "Hindi" also finds bollywood / filmi uploads, "Punjabi" finds bhangra, etc.
+  static const Map<String, String> _aliases = {
+    'hindi': '(hindi OR bollywood OR filmi)',
+    'bollywood': '(bollywood OR filmi OR hindi)',
+    'punjabi': '(punjabi OR bhangra)',
+    'tamil': '(tamil OR kollywood)',
+    'telugu': '(telugu OR tollywood)',
+    'ghazal': '(ghazal OR sufi)',
+    'bhakti': '(bhakti OR bhajan OR devotional)',
+    'indie': '(indian OR indie)',
+    'party': '(party OR dance)',
+    'sad': '(sad OR emotional)',
+    'chill': '(chill OR lofi OR ambient)',
+    'hip-hop': '(hip hop OR rap)',
+    'jazz': '(jazz OR blues)',
+    'focus': '(piano OR instrumental OR classical)',
+  };
+
   Future<List<Song>> browse({String? genre, int limit = 14}) async {
     final key = 'g:${genre ?? 'popular'}:$limit';
     final cached = _cache[key];
     if (cached != null) return cached;
-    final query = genre == null || genre.toLowerCase() == 'all'
+    final term = genre?.toLowerCase().trim();
+    final query = term == null || term == 'all'
         ? 'collection:(netlabels) AND mediatype:(audio)'
-        : '"$genre" AND mediatype:(audio)';
+        : '${_aliases[term] ?? '"$genre"'} AND mediatype:(audio)';
     final songs = await _run(query, limit);
     _cache[key] = songs;
     return songs;

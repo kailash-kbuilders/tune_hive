@@ -19,13 +19,18 @@ import 'song_list_screen.dart';
 
 const List<String> kCategories = [
   'All',
+  'Hindi',
+  'Punjabi',
+  'Tamil',
+  'Ghazal',
+  'Bhakti',
   'Party',
-  'Blues',
-  'Sad',
-  'Hip-Hop',
   'Chill',
+  'Hip-Hop',
+  'Sad',
   'Jazz',
   'Focus',
+  'Blues',
 ];
 
 class _Collection {
@@ -36,9 +41,11 @@ class _Collection {
 }
 
 const List<_Collection> kCollections = [
-  _Collection('Top Songs Global', 'pop', 'Popular worldwide'),
-  _Collection('Chill & Lo-Fi', 'lofi', 'Slow down a little'),
-  _Collection('Jazz Nights', 'jazz', 'Late night listening'),
+  _Collection('Bollywood & Hindi', 'hindi', 'Filmi, indie aur pyaar wale geet'),
+  _Collection('Punjabi Beats', 'punjabi', 'Bhangra aur dhol'),
+  _Collection('Ghazal & Sufi', 'ghazal', 'Shaam dhalne ke baad'),
+  _Collection('Bhakti & Bhajan', 'bhakti', 'Shanti ke liye'),
+  _Collection('South Side', 'tamil', 'Tamil aur Telugu picks'),
 ];
 
 class HomeScreen extends StatefulWidget {
@@ -151,6 +158,10 @@ class _HomeScreenState extends State<HomeScreen> {
     final device = context.watch<DeviceMusicService>();
     final library = context.watch<LibraryService>();
     final popular = _filter(device.songs);
+    // If the device has nothing for the chosen category (Indian categories
+    // usually live online), show the Creative Commons results instead.
+    final popularList =
+        (popular.isEmpty && _category != 'All' && _online.isNotEmpty) ? _online : popular;
     final recent = library.recent.take(5).toList();
 
     return GradientBg(
@@ -172,7 +183,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   Container(
                     height: 44,
                     width: 44,
-                    padding: const EdgeInsets.all(9),
+                    padding: const EdgeInsets.all(5),
                     decoration: BoxDecoration(
                       color: AppColors.card,
                       shape: BoxShape.circle,
@@ -210,19 +221,21 @@ class _HomeScreenState extends State<HomeScreen> {
               selected: _category,
               onSelected: (value) {
                 setState(() => _category = value);
-                if (_online.isEmpty && value != 'All') _loadOnline(genre: value);
+                if (value != 'All') _loadOnline(genre: value);
               },
             ),
             SectionHeader(
               title: 'Popular Songs',
-              actionLabel: popular.isEmpty ? null : 'See all',
-              onAction: popular.isEmpty
+              actionLabel: popularList.isEmpty ? null : 'See all',
+              onAction: popularList.isEmpty
                   ? null
                   : () => Navigator.of(context).push(MaterialPageRoute(
                         builder: (_) => SongListScreen(
-                          title: 'Popular Songs',
-                          subtitle: '${popular.length} tracks · device',
-                          songs: popular,
+                          title: _category == 'All' ? 'Popular Songs' : _category,
+                          subtitle: popular.isEmpty
+                              ? '${popularList.length} tracks · Creative Commons'
+                              : '${popularList.length} tracks · device',
+                          songs: popularList,
                         ),
                       )),
             ),
@@ -258,7 +271,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
               )
-            else if (popular.isEmpty)
+            else if (popularList.isEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: AppCard(
@@ -286,12 +299,12 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: ListView.separated(
                   scrollDirection: Axis.horizontal,
                   padding: const EdgeInsets.symmetric(horizontal: 20),
-                  itemCount: popular.take(12).length,
+                  itemCount: popularList.take(12).length,
                   separatorBuilder: (_, __) => const SizedBox(width: 14),
                   itemBuilder: (context, index) {
-                    final song = popular[index];
+                    final song = popularList[index];
                     return GestureDetector(
-                      onTap: () => _play(context, popular, index),
+                      onTap: () => _play(context, popularList, index),
                       child: SizedBox(
                         width: 148,
                         child: Column(

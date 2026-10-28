@@ -31,7 +31,16 @@ class _SearchScreenState extends State<SearchScreen> {
   bool _searching = false;
   String? _error;
 
-  static const _suggestions = ['Lofi', 'Jazz', 'Piano', 'Rock', 'Chill'];
+  static const _suggestions = [
+    'Bollywood',
+    'Hindi',
+    'Punjabi',
+    'Ghazal',
+    'Bhakti',
+    'Tamil',
+    'Indie',
+    'Lofi',
+  ];
 
   @override
   void dispose() {

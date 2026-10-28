@@ -63,8 +63,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> with SingleTickerPr
                           alignment: Alignment.center,
                           children: [
                             Container(
-                              height: 300,
-                              width: 300,
+                              height: 320,
+                              width: 320,
                               decoration: const BoxDecoration(
                                 shape: BoxShape.circle,
                                 gradient: RadialGradient(
@@ -74,8 +74,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> with SingleTickerPr
                             ),
                             Image.asset(
                               'assets/images/logo.png',
-                              height: 210,
-                              width: 210,
+                              height: 275,
+                              width: 275,
                               fit: BoxFit.contain,
                             ),
                           ],
