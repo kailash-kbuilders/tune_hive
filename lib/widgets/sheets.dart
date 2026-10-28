@@ -168,6 +168,28 @@ Future<void> showSleepSheet(BuildContext context) {
                     );
                   }),
                   GestureDetector(
+                    onTap: () async {
+                      Navigator.of(sheetContext).pop();
+                      final minutes = await promptForSleepMinutes(context);
+                      if (minutes == null) return;
+                      player.setSleepTimer(Duration(minutes: minutes));
+                    },
+                    child: Container(
+                      height: 46,
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: AppColors.cardSoft,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: AppColors.line),
+                      ),
+                      child: const Text(
+                        'Custom',
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                  ),
+                  GestureDetector(
                     onTap: () {
                       player.sleepAtEndOfTrack();
                       Navigator.of(sheetContext).pop();
@@ -614,4 +636,58 @@ class _EqualizerSheetState extends State<_EqualizerSheet> {
       ),
     );
   }
+}
+
+
+Future<int?> promptForSleepMinutes(BuildContext context) async {
+  final controller = TextEditingController();
+  final value = await showDialog<String>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      backgroundColor: AppColors.cardSoft,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+      title: const Text('Sleep timer', style: TextStyle(fontSize: 16)),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Kitne minute baad music band ho?',
+            style: TextStyle(fontSize: 12, color: AppColors.muted),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: controller,
+            autofocus: true,
+            keyboardType: TextInputType.number,
+            style: const TextStyle(fontSize: 14),
+            decoration: InputDecoration(
+              hintText: 'Jaise 25',
+              hintStyle: const TextStyle(color: AppColors.muted, fontSize: 13),
+              filled: true,
+              fillColor: AppColors.card,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide.none,
+              ),
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(),
+          child: const Text('Cancel', style: TextStyle(color: AppColors.muted)),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(controller.text),
+          child: const Text('Set', style: TextStyle(color: AppColors.lime)),
+        ),
+      ],
+    ),
+  );
+  controller.dispose();
+  final minutes = int.tryParse((value ?? '').trim());
+  if (minutes == null || minutes <= 0) return null;
+  return minutes.clamp(1, 600);
 }

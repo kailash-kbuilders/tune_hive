@@ -199,7 +199,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final library = context.watch<LibraryService>();
     final online = _online == true;
     final deviceSongs = _filter(device.songs);
-    final recent = library.recent.take(5).toList();
+    final recent = library.recent.take(4).toList();
 
     return GradientBg(
       child: RefreshIndicator(
@@ -217,7 +217,7 @@ class _HomeScreenState extends State<HomeScreen> {
           await device.load(force: true);
         },
         child: ListView(
-          padding: const EdgeInsets.only(top: 8, bottom: 200),
+          padding: const EdgeInsets.only(top: 8, bottom: 230),
           physics: const AlwaysScrollableScrollPhysics(),
           children: [
             _header(context, library),

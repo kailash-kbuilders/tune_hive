@@ -16,6 +16,8 @@ import '../widgets/sheets.dart';
 import '../widgets/song_tile.dart';
 import 'player_screen.dart';
 
+const int _pageSize = 20;
+
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
 
@@ -25,26 +27,22 @@ class SearchScreen extends StatefulWidget {
 
 class _SearchScreenState extends State<SearchScreen> {
   final TextEditingController _controller = TextEditingController();
+  final ScrollController _scroll = ScrollController();
   Timer? _debounce;
-  String _scope = 'Device';
-  String _query = '';
-  List<Song> _online = [];
-  bool _searching = false;
-  String? _error;
 
-  @override
-  void initState() {
-    super.initState();
-    // Online first: if the device has internet, search the live catalogue.
-    NetworkService.isOnline().then((online) {
-      if (!mounted || !online) return;
-      setState(() => _scope = 'Online');
-    });
-  }
+  String _scope = 'Online';
+  String _query = '';
+  bool _online = true;
+  List<Song> _results = [];
+  int _offset = 0;
+  bool _hasMore = true;
+  bool _searching = false;
+  bool _loadingMore = false;
+  String? _error;
 
   static const _suggestions = [
     'Bollywood',
-    'Hindi',
+    'Arijit Singh',
     'Punjabi',
     'Ghazal',
     'Bhakti',
@@ -54,10 +52,33 @@ class _SearchScreenState extends State<SearchScreen> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _scroll.addListener(_onScroll);
+    NetworkService.isOnline().then((online) {
+      if (!mounted) return;
+      setState(() {
+        _online = online;
+        // Online is primary when there is internet, device when there is not.
+        _scope = online ? 'Online' : 'Device';
+      });
+    });
+  }
+
+  @override
   void dispose() {
     _debounce?.cancel();
+    _scroll.dispose();
     _controller.dispose();
     super.dispose();
+  }
+
+  void _onScroll() {
+    if (_scope != 'Online' || !_online) return;
+    if (!_scroll.hasClients) return;
+    if (_scroll.position.pixels >= _scroll.position.maxScrollExtent - 500) {
+      _searchOnline(reset: false);
+    }
   }
 
   void _onChanged(String value) {
@@ -65,37 +86,64 @@ class _SearchScreenState extends State<SearchScreen> {
     if (_scope != 'Online') return;
     _debounce?.cancel();
     if (value.trim().length < 2) {
-      setState(() => _online = []);
+      setState(() => _results = []);
       return;
     }
-    _debounce = Timer(const Duration(milliseconds: 650), _searchOnline);
+    _debounce = Timer(const Duration(milliseconds: 600), () => _searchOnline());
   }
 
-  Future<void> _searchOnline() async {
+  Future<void> _searchOnline({bool reset = true}) async {
     final term = _controller.text.trim();
     if (term.length < 2) return;
-    setState(() {
-      _searching = true;
-      _error = null;
-    });
+    if (reset) {
+      setState(() {
+        _searching = true;
+        _results = [];
+        _offset = 0;
+        _hasMore = true;
+        _error = null;
+      });
+    } else {
+      if (_loadingMore || !_hasMore) return;
+      setState(() => _loadingMore = true);
+    }
     try {
-      final songs = await context.read<OnlineMusicService>().search(term);
+      final songs = await context
+          .read<OnlineMusicService>()
+          .search(term, limit: _pageSize, offset: _offset);
       if (!mounted) return;
-      setState(() => _online = songs);
-      if (songs.isEmpty) setState(() => _error = 'Kuch nahi mila — koi aur term try karo.');
+      final known = _results.map((song) => song.id).toSet();
+      final fresh = songs.where((song) => !known.contains(song.id)).toList();
+      setState(() {
+        _results.addAll(fresh);
+        _offset += _pageSize;
+        _hasMore = songs.isNotEmpty && fresh.isNotEmpty;
+        if (_results.isEmpty) _error = 'Kuch nahi mila — koi aur term try karo.';
+      });
     } on OnlineUnavailable {
       if (!mounted) return;
-      setState(() => _error = 'Internet nahi hai. Device tab se apne gaane chala lo.');
+      setState(() {
+        _hasMore = false;
+        _error = 'Internet nahi hai. Device tab se apne gaane chala lo.';
+      });
     } catch (_) {
       if (!mounted) return;
-      setState(() => _error = 'Search fail ho gaya. Dobara try karo.');
+      setState(() {
+        _hasMore = false;
+        _error = 'Search fail ho gaya. Dobara try karo.';
+      });
     } finally {
-      if (mounted) setState(() => _searching = false);
+      if (mounted) {
+        setState(() {
+          _searching = false;
+          _loadingMore = false;
+        });
+      }
     }
   }
 
   Future<void> _play(List<Song> songs, int index) async {
-    if (songs.isEmpty) return;
+    if (songs.isEmpty || index >= songs.length) return;
     final player = context.read<PlayerService>();
     final library = context.read<LibraryService>();
     await player.playSongs(songs, index);
@@ -104,11 +152,20 @@ class _SearchScreenState extends State<SearchScreen> {
     Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PlayerScreen()));
   }
 
+  void _switchScope(String scope) {
+    setState(() => _scope = scope);
+    if (scope == 'Online' && _controller.text.trim().length >= 2 && _results.isEmpty) {
+      _searchOnline();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final device = context.watch<DeviceMusicService>();
     final player = context.watch<PlayerService>();
-    final results = _scope == 'Device' ? device.search(_query) : _online;
+    final online = _scope == 'Online' && _online;
+    final deviceResults = device.search(_query);
+    final songs = online ? _results : deviceResults;
 
     return GradientBg(
       child: SafeArea(
@@ -154,7 +211,7 @@ class _SearchScreenState extends State<SearchScreen> {
                         onTap: () {
                           _controller.clear();
                           _onChanged('');
-                          setState(() => _online = []);
+                          setState(() => _results = []);
                         },
                         child: const Icon(Icons.close_rounded, size: 18, color: AppColors.muted),
                       ),
@@ -167,26 +224,43 @@ class _SearchScreenState extends State<SearchScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Row(
                 children: [
-                  _ScopeChip(
-                    label: 'Device',
-                    icon: Icons.phone_android_rounded,
-                    active: _scope == 'Device',
-                    onTap: () => setState(() => _scope = 'Device'),
-                  ),
-                  const SizedBox(width: 10),
-                  _ScopeChip(
-                    label: 'Online · Free',
-                    icon: Icons.public_rounded,
-                    active: _scope == 'Online',
-                    onTap: () {
-                      setState(() => _scope = 'Online');
-                      if (_query.trim().length >= 2) _searchOnline();
-                    },
-                  ),
+                  if (_online) ...[
+                    _ScopeChip(
+                      label: 'Online',
+                      icon: Icons.public_rounded,
+                      active: _scope == 'Online',
+                      onTap: () => _switchScope('Online'),
+                    ),
+                    const SizedBox(width: 10),
+                    _ScopeChip(
+                      label: 'Device',
+                      icon: Icons.phone_android_rounded,
+                      active: _scope == 'Device',
+                      onTap: () => _switchScope('Device'),
+                    ),
+                  ] else ...[
+                    _ScopeChip(
+                      label: 'Device',
+                      icon: Icons.phone_android_rounded,
+                      active: _scope == 'Device',
+                      onTap: () => _switchScope('Device'),
+                    ),
+                    const SizedBox(width: 10),
+                    _ScopeChip(
+                      label: 'Online (offline)',
+                      icon: Icons.wifi_off_rounded,
+                      active: false,
+                      onTap: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Internet nahi hai — device ke gaane chal rahe hain')),
+                        );
+                      },
+                    ),
+                  ],
                 ],
               ),
             ),
-            if (_scope == 'Online' && _query.trim().length < 2)
+            if (online && _query.trim().length < 2)
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
                 child: Wrap(
@@ -218,32 +292,44 @@ class _SearchScreenState extends State<SearchScreen> {
                 padding: EdgeInsets.symmetric(vertical: 22),
                 child: Center(child: CircularProgressIndicator(color: AppColors.lime)),
               ),
-            if (_scope == 'Online' && _error != null && !_searching)
+            if (online && _error != null && !_searching)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Text(_error!,
                     style: const TextStyle(fontSize: 12, color: AppColors.muted, height: 1.5)),
               ),
             Expanded(
-              child: results.isEmpty
+              child: songs.isEmpty
                   ? EmptyState(
-                      icon: _scope == 'Device'
-                          ? Icons.phone_android_rounded
-                          : Icons.public_rounded,
-                      title: _scope == 'Device' ? 'Koi gaana nahi mila' : 'Online search',
-                      message: _scope == 'Device'
-                          ? 'Device ke gaane yahan dikhenge. Online tab se free Creative Commons music bhi search kar sakte ho.'
-                          : 'Do akshar likho — Audius aur Internet Archive se free songs aa jayenge.',
+                      icon: online ? Icons.public_rounded : Icons.phone_android_rounded,
+                      title: online ? 'Online search' : 'Koi gaana nahi mila',
+                      message: online
+                          ? 'Do akshar likho — matching songs aa jayenge, aur neeche scroll karte jao to aur aate rahenge.'
+                          : 'Device ke gaane yahan dikhenge. Net ho to online search khud primary ban jaata hai.',
                     )
                   : ListView.builder(
-                      padding: const EdgeInsets.only(top: 8, bottom: 200),
-                      itemCount: results.length,
+                      controller: _scroll,
+                      padding: const EdgeInsets.only(top: 8, bottom: 220),
+                      itemCount: songs.length + (_loadingMore ? 1 : 0),
                       itemBuilder: (context, index) {
-                        final song = results[index];
+                        if (index >= songs.length) {
+                          return const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 20),
+                            child: Center(
+                              child: SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2, color: AppColors.lime),
+                              ),
+                            ),
+                          );
+                        }
+                        final song = songs[index];
                         return SongTile(
                           song: song,
                           isCurrent: player.current?.id == song.id,
-                          onTap: () => _play(results, index),
+                          onTap: () => _play(songs, index),
                           onMore: () => showSongMenu(context, song),
                         );
                       },

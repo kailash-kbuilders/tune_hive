@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:audio_service/audio_service.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -34,6 +36,9 @@ Future<void> main() async {
       artDownscaleHeight: 512,
     ),
   );
+
+  // Bring back whatever was queued last time, paused where it stopped.
+  unawaited(playerService.restoreQueue());
 
   runApp(TuneHiveApp(library: library, playerService: playerService));
 }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -9,6 +10,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:just_audio/just_audio.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/song.dart';
 import 'device_music_service.dart';
@@ -83,6 +85,7 @@ class PlayerService extends BaseAudioHandler with QueueHandler, SeekHandler, Cha
       if (state.processingState == ProcessingState.completed) {
         _handleCompleted();
       }
+      if (!state.playing) unawaited(_saveQueue());
       notifyListeners();
     });
 
@@ -92,6 +95,7 @@ class PlayerService extends BaseAudioHandler with QueueHandler, SeekHandler, Cha
       mediaItem.add(_mediaItemFor(_current!));
       unawaited(_refreshArt(_current!));
       _broadcastState();
+      unawaited(_saveQueue());
       notifyListeners();
     });
 
@@ -103,6 +107,49 @@ class PlayerService extends BaseAudioHandler with QueueHandler, SeekHandler, Cha
     _positionTicker = Timer.periodic(const Duration(seconds: 1), (_) {
       if (_player.playing) _broadcastState();
     });
+  }
+
+  // --------------------------------------------------------- persistence ---
+
+  /// The queue survives app restarts — it is written to disk after every
+  /// track change and pause, and restored when the app opens again.
+  Future<void> _saveQueue() async {
+    if (_songs.isEmpty) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+          'queue_songs', jsonEncode(_songs.map((song) => song.toJson()).toList()));
+      await prefs.setInt('queue_index', _player.currentIndex ?? 0);
+      await prefs.setInt('queue_pos', _player.position.inMilliseconds);
+    } catch (_) {
+      // Saving is best effort.
+    }
+  }
+
+  Future<void> restoreQueue() async {
+    if (_songs.isNotEmpty) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString('queue_songs');
+      if (raw == null || raw.isEmpty) return;
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return;
+      final songs = decoded
+          .whereType<Map>()
+          .map((item) => Song.fromJson(Map<String, dynamic>.from(item)))
+          .where((song) => song.uri.isNotEmpty)
+          .toList();
+      if (songs.isEmpty) return;
+      _songs
+        ..clear()
+        ..addAll(songs);
+      var index = prefs.getInt('queue_index') ?? 0;
+      if (index < 0 || index >= songs.length) index = 0;
+      final position = Duration(milliseconds: prefs.getInt('queue_pos') ?? 0);
+      await _loadSources(initialIndex: index, autoPlay: false, position: position);
+    } catch (_) {
+      // Nothing to restore.
+    }
   }
 
   // ------------------------------------------------------------ playback ---

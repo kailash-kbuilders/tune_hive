@@ -43,7 +43,7 @@ class _RootShellState extends State<RootShell> {
                 children: [
                   const MiniPlayer(),
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
                     child: Container(
                       height: 66,
                       padding: const EdgeInsets.symmetric(horizontal: 10),

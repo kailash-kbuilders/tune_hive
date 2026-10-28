@@ -13,12 +13,17 @@ class RotatingDisc extends StatefulWidget {
     required this.spinning,
     required this.progress,
     this.size = 280,
+    this.extraTurns = 0,
   });
 
   final Widget child;
   final bool spinning;
   final double progress;
   final double size;
+
+  /// Extra rotation (in turns) added by hand, e.g. when the disc is used as a
+  /// volume knob.
+  final double extraTurns;
 
   @override
   State<RotatingDisc> createState() => _RotatingDiscState();
@@ -74,8 +79,12 @@ class _RotatingDiscState extends State<RotatingDisc> with SingleTickerProviderSt
               ),
             ),
           ),
-          RotationTransition(
-            turns: _controller,
+          AnimatedBuilder(
+            animation: _controller,
+            builder: (context, child) => Transform.rotate(
+              angle: (_controller.value + widget.extraTurns) * 2 * math.pi,
+              child: child,
+            ),
             child: Container(
               width: inner,
               height: inner,

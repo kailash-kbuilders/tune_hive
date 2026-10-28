@@ -236,13 +236,14 @@ class OnlineMusicService {
 
   /// Apple's public iTunes Search API — no key, full Indian catalogue, also
   /// returns official 30 second previews.
-  Future<List<Song>> _itunes(String term, {int limit = 25}) async {
+  Future<List<Song>> _itunes(String term, {int limit = 25, int offset = 0}) async {
     final uri = Uri.https('itunes.apple.com', '/search', <String, String>{
       'term': term,
       'country': 'in',
       'media': 'music',
       'entity': 'song',
       'limit': '$limit',
+      if (offset > 0) 'offset': '$offset',
     });
     final response = await http.get(uri).timeout(const Duration(seconds: 20));
     if (response.statusCode != 200) throw const OnlineUnavailable();
@@ -300,31 +301,34 @@ class OnlineMusicService {
       ]));
 
   /// Category browsing (Hindi, Punjabi, Party …).
-  Future<List<Song>> browse({String? genre, int limit = 16}) async {
+  Future<List<Song>> browse({String? genre, int limit = 16, int offset = 0}) async {
     final term = genre?.toLowerCase().trim();
     if (term == null || term == 'all') return trendingToday(limit: limit);
-    return _cached('g:$term:$limit', () => _chain([
-          () => _jamendo({'fuzzytags': _tagFor(term), 'limit': '$limit'}),
-          () => _audius('/v1/tracks/search', {'query': _audiusTerm(term), 'limit': '$limit'}),
-          () => _deezer('/search', {'q': _audiusTerm(term), 'limit': '$limit'}),
-          () => _itunes(_audiusTerm(term), limit: limit),
-          () => _run('${_alias(term)} AND mediatype:(audio)', limit),
+    return _cached('g:$term:$limit:$offset', () => _chain([
+          () => _jamendo({'fuzzytags': _tagFor(term), 'limit': '$limit', 'offset': '$offset'}),
+          () => _audius('/v1/tracks/search',
+              {'query': _audiusTerm(term), 'limit': '$limit', 'offset': '$offset'}),
+          () => _deezer('/search',
+              {'q': _audiusTerm(term), 'limit': '$limit', 'index': '$offset'}),
+          () => _itunes(_audiusTerm(term), limit: limit, offset: offset),
+          () => _run('${_alias(term)} AND mediatype:(audio)', limit, offset: offset),
         ]));
   }
 
   /// Search across every source, ranked so the closest match comes first.
-  Future<List<Song>> search(String term, {int limit = 24}) async {
+  Future<List<Song>> search(String term, {int limit = 24, int offset = 0}) async {
     final query = term.trim();
     if (query.isEmpty) return trendingToday(limit: limit);
-    return _cached('s:$query:$limit', () async {
+    return _cached('s:$query:$limit:$offset', () async {
       final songs = await _chain([
-        () => _jamendo({'search': query, 'limit': '$limit'}),
-        () => _audius('/v1/tracks/search', {'query': query, 'limit': '$limit'}),
-        () => _deezer('/search', {'q': query, 'limit': '$limit'}),
-        () => _itunes(query, limit: limit),
-        () => _run('$query AND mediatype:(audio)', limit),
+        () => _jamendo({'search': query, 'limit': '$limit', 'offset': '$offset'}),
+        () => _audius('/v1/tracks/search',
+            {'query': query, 'limit': '$limit', 'offset': '$offset'}),
+        () => _deezer('/search', {'q': query, 'limit': '$limit', 'index': '$offset'}),
+        () => _itunes(query, limit: limit, offset: offset),
+        () => _run('$query AND mediatype:(audio)', limit, offset: offset),
       ]);
-      return _rank(songs, query);
+      return offset == 0 ? _rank(songs, query) : songs;
     });
   }
 
@@ -403,12 +407,13 @@ class OnlineMusicService {
 
   // ------------------------------------------------------- Internet Archive --
 
-  Future<List<Song>> _run(String query, int limit, {String sort = 'downloads desc'}) async {
+  Future<List<Song>> _run(String query, int limit,
+      {String sort = 'downloads desc', int offset = 0}) async {
     final uri = Uri.https('archive.org', '/advancedsearch.php', <String, dynamic>{
       'q': query,
       'fl[]': <String>['identifier', 'title', 'creator', 'year'],
       'rows': '$limit',
-      'page': '1',
+      'page': '${offset ~/ (limit == 0 ? 1 : limit) + 1}',
       'output': 'json',
       'sort[]': sort,
     });

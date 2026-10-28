@@ -6,12 +6,24 @@ import '../services/player_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/artwork.dart';
 import '../widgets/gradient_bg.dart';
-import '../widgets/rotating_disc.dart';
+import '../widgets/disc_with_volume.dart';
 import '../widgets/sheets.dart';
 import 'queue_screen.dart';
 
-class PlayerScreen extends StatelessWidget {
+class PlayerScreen extends StatefulWidget {
   const PlayerScreen({super.key});
+
+  @override
+  State<PlayerScreen> createState() => _PlayerScreenState();
+}
+
+class _PlayerScreenState extends State<PlayerScreen> {
+  double _volume = 1.0;
+
+  void _onVolume(double value) {
+    setState(() => _volume = value);
+    context.read<PlayerService>().setVolume(value);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -85,11 +97,13 @@ class PlayerScreen extends StatelessWidget {
                         final total = player.player.duration?.inMilliseconds ?? 0;
                         final pos = snapshot.data?.inMilliseconds ?? 0;
                         final progress = total <= 0 ? 0.0 : (pos / total).clamp(0.0, 1.0);
-                        return RotatingDisc(
+                        return DiscWithVolume(
                           spinning: player.isPlaying,
                           progress: progress,
-                          size: 262,
-                          child: SongArtwork(song: song, size: 190, radius: 0),
+                          size: 248,
+                          volume: _volume,
+                          onVolumeChanged: _onVolume,
+                          child: SongArtwork(song: song, size: 180, radius: 0),
                         );
                       },
                     ),
